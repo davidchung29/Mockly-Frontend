@@ -1,7 +1,8 @@
 /**
  * Video Audio Processor Component
- * Handles video/audio capture, speech recognition, and transcript processing
- * Refactored to use custom hooks and presentational components
+ * Handles video/audio capture, speech recognition, transcript processing, and eye tracking
+ * Enhanced with facial recognition and eye contact analysis in interviewer view
+ * WITH DEBUGGING FOR EYE TRACKING DATA FLOW
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -9,6 +10,7 @@ import SelectedQuestionDisplay from './SelectedQuestionDisplay';
 import PermissionScreen from './PermissionScreen';
 import VideoCard from './VideoCard';
 import TranscriptDisplay from './TranscriptDisplay';
+import EyeTrackingAnalyzer from './EyeTrackingAnalyzer';
 import { useMediaStream } from '../hooks/useMediaStream';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { useTranscriptSimulation } from '../hooks/useTranscriptSimulation';
@@ -24,10 +26,24 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const [isFinished, setIsFinished] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   
+  // Eye tracking state
+  const [eyeTrackingMetrics, setEyeTrackingMetrics] = useState({
+    eyeContactPercentage: 0,
+    smilePercentage: 0,
+    gazeStatus: 'Initializing',
+    sessionTime: '00:00',
+    totalFrames: 0,
+    eyeContactFrames: 0,
+    smileFrames: 0
+  });
+  const [isEyeTrackingActive, setIsEyeTrackingActive] = useState(false);
+  
   // Refs for cleanup and scrolling
   const transcriptScrollableRef = useRef();
   const dotIntervalRef = useRef();
   const timeoutRef = useRef();
+  const eyeTrackingResetRef = useRef();
+  const eyeTrackingCanvasRef = useRef(); // Ref for the landmark canvas
 
   // Custom hooks
   const mediaStream = useMediaStream();
@@ -49,6 +65,12 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     }
     return speechRecognition.transcript;
   }, [transcriptSimulation.simulatedTranscript, speechRecognition.transcript]);
+
+  // Handle eye tracking metrics updates
+  const handleEyeTrackingUpdate = useCallback((metrics) => {
+    setEyeTrackingMetrics(metrics);
+    DevHelpers.log('Eye tracking metrics updated:', metrics);
+  }, []);
 
   // Listening dots animation
   const setupDotAnimation = useCallback(() => {
@@ -80,24 +102,65 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     }
   }, []);
 
-  // Handle interview completion
+  // ENHANCED Handle interview completion with eye tracking data AND DEBUGGING
   const handleInterviewCompletion = useCallback(() => {
     if (isFinished) return;
     
     setIsFinished(true);
+    setIsEyeTrackingActive(false);
+    
     const completeTranscript = getCurrentTranscript();
     
-    DevHelpers.log('Interview completion:', { transcript: completeTranscript });
+    // DEBUG: Enhanced logging
+    console.log('🎯 STEP 1 - VideoAudioProcessor handleInterviewCompletion');
+    console.log('📊 Raw eyeTrackingMetrics:', eyeTrackingMetrics);
+    console.log('📝 Complete transcript:', completeTranscript);
+    console.log('🔍 eyeTrackingMetrics keys:', Object.keys(eyeTrackingMetrics));
+    console.log('📈 Individual metric values:', {
+      eyeContactPercentage: eyeTrackingMetrics.eyeContactPercentage,
+      smilePercentage: eyeTrackingMetrics.smilePercentage,
+      sessionTime: eyeTrackingMetrics.sessionTime,
+      totalFrames: eyeTrackingMetrics.totalFrames
+    });
+    
+    // Ensure we have valid data before sending
+    const eyeTrackingData = {
+      eyeContactPercentage: eyeTrackingMetrics.eyeContactPercentage || 0,
+      smilePercentage: eyeTrackingMetrics.smilePercentage || 0,
+      totalFrames: eyeTrackingMetrics.totalFrames || 0,
+      eyeContactFrames: eyeTrackingMetrics.eyeContactFrames || 0,
+      smileFrames: eyeTrackingMetrics.smileFrames || 0,
+      sessionDuration: eyeTrackingMetrics.sessionTime || '00:00'
+    };
+    
+    console.log('📦 Processed eyeTrackingData:', eyeTrackingData);
+    
+    // Combine default metrics with eye tracking data
+    const enhancedMetrics = {
+      ...DEFAULT_METRICS,
+      eyeTracking: eyeTrackingData,
+      eye_tracking: eyeTrackingData, // Also add underscore version
+      // Add individual fields for direct access
+      eyeContactPercentage: eyeTrackingData.eyeContactPercentage,
+      smilePercentage: eyeTrackingData.smilePercentage,
+      sessionDuration: eyeTrackingData.sessionDuration
+    };
+    
+    console.log('🚀 STEP 2 - About to call onFinish with enhancedMetrics:', enhancedMetrics);
+    console.log('🔍 Enhanced metrics JSON:', JSON.stringify(enhancedMetrics, null, 2));
+    console.log('🔍 Enhanced metrics keys:', Object.keys(enhancedMetrics));
     
     if (TranscriptValidator.isValid(completeTranscript)) {
-      onFinish(DEFAULT_METRICS, completeTranscript);
+      console.log('✅ Transcript is valid, calling onFinish...');
+      onFinish(enhancedMetrics, completeTranscript);
     } else {
-      // Replace alert with better UX - could be a modal in the future
+      console.log('⚠️ Transcript is not valid, calling onFinish with empty transcript...');
       DevHelpers.error(ERROR_MESSAGES.NO_SPEECH_DETECTED);
-      // For now, still proceed with empty transcript
-      onFinish(DEFAULT_METRICS, '');
+      onFinish(enhancedMetrics, '');
     }
-  }, [isFinished, getCurrentTranscript, onFinish]);
+    
+    console.log('🎯 STEP 3 - onFinish called successfully');
+  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics]);
 
   // Handle done interview (user wants to finish with current response)
   const handleDoneInterview = useCallback(() => {
@@ -119,12 +182,30 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     if (!confirmEnd) return;
     
     setIsFinished(true);
+    setIsEyeTrackingActive(false);
     if (onEnd) onEnd();
   }, [isFinished, onEnd]);
 
   // Toggle video card expansion
   const toggleVideoCard = useCallback(() => {
     setIsVideoCardExpanded(prev => !prev);
+  }, []);
+
+  // Reset eye tracking metrics
+  const resetEyeTrackingMetrics = useCallback(() => {
+    setEyeTrackingMetrics({
+      eyeContactPercentage: 0,
+      smilePercentage: 0,
+      gazeStatus: 'Initializing',
+      sessionTime: '00:00',
+      totalFrames: 0,
+      eyeContactFrames: 0,
+      smileFrames: 0
+    });
+    
+    if (eyeTrackingResetRef.current) {
+      eyeTrackingResetRef.current();
+    }
   }, []);
 
   // Initialize everything
@@ -134,6 +215,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     try {
       setIsInitialized(true);
       setupDotAnimation();
+      
+      // Reset eye tracking metrics
+      resetEyeTrackingMetrics();
       
       // Start media capture
       const stream = await mediaStream.startCapture();
@@ -145,15 +229,18 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
         speechRecognition.startListening();
       }
       
+      // Start eye tracking
+      setIsEyeTrackingActive(true);
+      
       // Setup session timeout
       setupSessionTimeout();
       
-      DevHelpers.log('Interview initialized successfully');
+      DevHelpers.log('Interview initialized successfully with eye tracking');
     } catch (error) {
       DevHelpers.error('Failed to initialize interview:', error);
       setIsInitialized(false);
     }
-  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout]);
+  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout, resetEyeTrackingMetrics]);
 
   // Cleanup all resources
   const cleanupAll = useCallback(() => {
@@ -167,6 +254,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     mediaStream.stopCapture();
     speechRecognition.stopListening();
     transcriptSimulation.stopSimulation();
+    setIsEyeTrackingActive(false);
   }, [mediaStream, speechRecognition, transcriptSimulation]);
 
   // Auto-scroll effect
@@ -216,7 +304,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       
       {/* Main content */}
       <div className="interview-content-wrapper">
-        {/* Video sidebar */}
+        {/* Video sidebar with interviewer view */}
         <div className="interview-sidebar">
           <VideoCard
             hasVideo={mediaStream.hasVideo}
@@ -225,14 +313,30 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
             onToggle={toggleVideoCard}
             videoRef={mediaStream.videoRef}
             mediaStream={mediaStream.mediaStream}
+            eyeTrackingCanvasRef={eyeTrackingCanvasRef}
           />
         </div>
         
-        {/* Transcript main area */}
+        {/* Main content area with eye tracking metrics and transcript */}
         <div className="interview-main">
+          {/* Eye Tracking Analysis - positioned in the middle */}
+          <div className="interview-main__eye-tracking">
+            <EyeTrackingAnalyzer
+              videoRef={mediaStream.videoRef}
+              canvasRef={eyeTrackingCanvasRef}
+              isActive={isEyeTrackingActive}
+              onMetricsUpdate={handleEyeTrackingUpdate}
+              className="interview-eye-tracking"
+            />
+          </div>
+          
+          {/* Transcript section */}
           <div className="transcript-main">
             <div className="transcript-main__header">
-              <h3 className="transcript-main__title">Live Transcript</h3>
+              <h3 className="transcript-main__title">
+                <i className="fas fa-file-alt icon-sm"></i>
+                Live Transcript
+              </h3>
             </div>
             <div className="transcript-main__content" ref={transcriptScrollableRef}>
               <p className="transcript-main__text">
