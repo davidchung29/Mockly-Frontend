@@ -1,16 +1,15 @@
 /**
- * Video Audio Processor Component
- * Handles video/audio capture, speech recognition, transcript processing, and eye tracking
- * Enhanced with facial recognition and eye contact analysis in interviewer view
- * WITH DEBUGGING FOR EYE TRACKING DATA FLOW
+ * SIMPLE FIX - Direct Data Transfer
+ * Just make sure voice data gets to the feedback - no fancy stuff
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SelectedQuestionDisplay from './SelectedQuestionDisplay';
 import PermissionScreen from './PermissionScreen';
 import VideoCard from './VideoCard';
-import TranscriptDisplay from './TranscriptDisplay';
 import EyeTrackingAnalyzer from './EyeTrackingAnalyzer';
+import PitchAnalyzer from './PitchAnalyzer';
+import './PitchAnalyzer.css';
 import { useMediaStream } from '../hooks/useMediaStream';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { useTranscriptSimulation } from '../hooks/useTranscriptSimulation';
@@ -26,31 +25,43 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const [isFinished, setIsFinished] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   
-  // Eye tracking state
+  // Analysis state
   const [eyeTrackingMetrics, setEyeTrackingMetrics] = useState({
     eyeContactPercentage: 0,
     smilePercentage: 0,
     gazeStatus: 'Initializing',
-    sessionTime: '00:00',
-    totalFrames: 0,
-    eyeContactFrames: 0,
-    smileFrames: 0
+    sessionTime: '00:00'
   });
-  const [isEyeTrackingActive, setIsEyeTrackingActive] = useState(false);
   
-  // Refs for cleanup and scrolling
+  const [voiceMetrics, setVoiceMetrics] = useState({
+    volume: 0,
+    averageVolume: 0,
+    volumeVariation: 0,
+    pitchVariation: 60,
+    speechRate: 70,
+    clarity: 80,
+    totalSamples: 0
+  });
+  
+  const [isEyeTrackingActive, setIsEyeTrackingActive] = useState(false);
+  const [isVoiceAnalysisActive, setIsVoiceAnalysisActive] = useState(false);
+  
+  // ✅ SIMPLE: Just use current state values directly
+  const latestEyeMetricsRef = useRef(null);
+  const latestVoiceMetricsRef = useRef(null);
+  
+  // Other refs
   const transcriptScrollableRef = useRef();
   const dotIntervalRef = useRef();
   const timeoutRef = useRef();
-  const eyeTrackingResetRef = useRef();
-  const eyeTrackingCanvasRef = useRef(); // Ref for the landmark canvas
+  const eyeTrackingCanvasRef = useRef();
 
-  // Custom hooks
+  // Hooks
   const mediaStream = useMediaStream();
   const speechRecognition = useSpeechRecognition();
   const transcriptSimulation = useTranscriptSimulation();
 
-  // Get the current transcript from appropriate source
+  // Get current transcript
   const getCurrentTranscript = useCallback(() => {
     if (DevHelpers.isTranscriptSimulationEnabled()) {
       return transcriptSimulation.getFinalTranscript();
@@ -58,7 +69,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     return speechRecognition.getFinalTranscript();
   }, [transcriptSimulation, speechRecognition]);
 
-  // Get the live transcript for display
+  // Get live transcript
   const getLiveTranscript = useCallback(() => {
     if (DevHelpers.isTranscriptSimulationEnabled()) {
       return transcriptSimulation.simulatedTranscript;
@@ -66,31 +77,36 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     return speechRecognition.transcript;
   }, [transcriptSimulation.simulatedTranscript, speechRecognition.transcript]);
 
-  // Handle eye tracking metrics updates
+  // ✅ SIMPLE: Store metrics directly when received
   const handleEyeTrackingUpdate = useCallback((metrics) => {
+    console.log('👁️ Eye tracking update:', metrics);
     setEyeTrackingMetrics(metrics);
-    DevHelpers.log('Eye tracking metrics updated:', metrics);
+    latestEyeMetricsRef.current = metrics; // Store immediately
   }, []);
 
-  // Listening dots animation
+  const handleVoiceMetricsUpdate = useCallback((metrics) => {
+    console.log('🎙️ Voice metrics update:', metrics);
+    setVoiceMetrics(metrics);
+    latestVoiceMetricsRef.current = metrics; // Store immediately
+    
+    console.log('🎙️ STORED in ref:', latestVoiceMetricsRef.current);
+  }, []);
+
+  // Dots animation
   const setupDotAnimation = useCallback(() => {
-    if (dotIntervalRef.current) {
-      clearInterval(dotIntervalRef.current);
-    }
+    if (dotIntervalRef.current) clearInterval(dotIntervalRef.current);
     dotIntervalRef.current = setInterval(() => {
-      setListeningDots(prev => (prev.length >= INTERVIEW_CONFIG.maxDots ? '' : prev + '.'));
-    }, INTERVIEW_CONFIG.dotAnimationInterval);
+      setListeningDots(prev => (prev.length >= 3 ? '' : prev + '.'));
+    }, 500);
   }, []);
 
-  // Session timeout
+  // ✅ SIMPLE: Session timeout
   const setupSessionTimeout = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       if (isFinished) return;
       
-      DevHelpers.log('Session timeout reached, finishing interview');
+      console.log('⏰ TIMEOUT - Completing interview');
       handleInterviewCompletion();
     }, INTERVIEW_CONFIG.sessionDuration);
   }, [isFinished]);
@@ -102,147 +118,160 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     }
   }, []);
 
-  // ENHANCED Handle interview completion with eye tracking data AND DEBUGGING
+  // ✅ SIMPLE: Main completion handler
   const handleInterviewCompletion = useCallback(() => {
     if (isFinished) return;
     
+    console.log('🎯 ===== COMPLETING INTERVIEW =====');
     setIsFinished(true);
     setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
+    
+    // Get the LATEST metrics from refs (most recent data)
+    const finalEyeMetrics = latestEyeMetricsRef.current || eyeTrackingMetrics;
+    const finalVoiceMetrics = latestVoiceMetricsRef.current || voiceMetrics;
+    
+    console.log('📊 Final eye metrics:', finalEyeMetrics);
+    console.log('🎙️ Final voice metrics:', finalVoiceMetrics);
     
     const completeTranscript = getCurrentTranscript();
     
-    // DEBUG: Enhanced logging
-    console.log('🎯 STEP 1 - VideoAudioProcessor handleInterviewCompletion');
-    console.log('📊 Raw eyeTrackingMetrics:', eyeTrackingMetrics);
-    console.log('📝 Complete transcript:', completeTranscript);
-    console.log('🔍 eyeTrackingMetrics keys:', Object.keys(eyeTrackingMetrics));
-    console.log('📈 Individual metric values:', {
-      eyeContactPercentage: eyeTrackingMetrics.eyeContactPercentage,
-      smilePercentage: eyeTrackingMetrics.smilePercentage,
-      sessionTime: eyeTrackingMetrics.sessionTime,
-      totalFrames: eyeTrackingMetrics.totalFrames
-    });
-    
-    // Ensure we have valid data before sending
-    const eyeTrackingData = {
-      eyeContactPercentage: eyeTrackingMetrics.eyeContactPercentage || 0,
-      smilePercentage: eyeTrackingMetrics.smilePercentage || 0,
-      totalFrames: eyeTrackingMetrics.totalFrames || 0,
-      eyeContactFrames: eyeTrackingMetrics.eyeContactFrames || 0,
-      smileFrames: eyeTrackingMetrics.smileFrames || 0,
-      sessionDuration: eyeTrackingMetrics.sessionTime || '00:00'
-    };
-    
-    console.log('📦 Processed eyeTrackingData:', eyeTrackingData);
-    
-    // Combine default metrics with eye tracking data
-    const enhancedMetrics = {
+    // ✅ SIMPLE: Build the final object with direct field assignment
+    const finalReport = {
+      // Default metrics
       ...DEFAULT_METRICS,
-      eyeTracking: eyeTrackingData,
-      eye_tracking: eyeTrackingData, // Also add underscore version
-      // Add individual fields for direct access
-      eyeContactPercentage: eyeTrackingData.eyeContactPercentage,
-      smilePercentage: eyeTrackingData.smilePercentage,
-      sessionDuration: eyeTrackingData.sessionDuration
+      
+      // Eye tracking - simple direct assignment
+      eyeContactPercentage: finalEyeMetrics?.eyeContactPercentage || 0,
+      smilePercentage: finalEyeMetrics?.smilePercentage || 0,
+      sessionDuration: finalEyeMetrics?.sessionTime || '00:00',
+      
+      // Voice analysis - simple direct assignment
+      averageVolume: finalVoiceMetrics?.averageVolume || 0,
+      volumeVariation: finalVoiceMetrics?.volumeVariation || 0,
+      pitchVariation: finalVoiceMetrics?.pitchVariation || 0,
+      speechRate: finalVoiceMetrics?.speechRate || 0,
+      clarity: finalVoiceMetrics?.clarity || 0,
+      totalSamples: finalVoiceMetrics?.totalSamples || 0,
+      
+      // Also include nested objects for backup
+      eyeTracking: finalEyeMetrics || {},
+      voiceAnalysis: finalVoiceMetrics || {}
     };
     
-    console.log('🚀 STEP 2 - About to call onFinish with enhancedMetrics:', enhancedMetrics);
-    console.log('🔍 Enhanced metrics JSON:', JSON.stringify(enhancedMetrics, null, 2));
-    console.log('🔍 Enhanced metrics keys:', Object.keys(enhancedMetrics));
+    console.log('🚀 FINAL REPORT OBJECT:');
+    console.log('averageVolume:', finalReport.averageVolume);
+    console.log('volumeVariation:', finalReport.volumeVariation);
+    console.log('totalSamples:', finalReport.totalSamples);
+    console.log('Full report:', finalReport);
     
+    // Call onFinish
+    console.log('📞 Calling onFinish...');
     if (TranscriptValidator.isValid(completeTranscript)) {
-      console.log('✅ Transcript is valid, calling onFinish...');
-      onFinish(enhancedMetrics, completeTranscript);
+      onFinish(finalReport, completeTranscript);
     } else {
-      console.log('⚠️ Transcript is not valid, calling onFinish with empty transcript...');
-      DevHelpers.error(ERROR_MESSAGES.NO_SPEECH_DETECTED);
-      onFinish(enhancedMetrics, '');
+      onFinish(finalReport, '');
     }
+    console.log('📞 onFinish called successfully');
     
-    console.log('🎯 STEP 3 - onFinish called successfully');
-  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics]);
+    console.log('🎯 ===== COMPLETION DONE =====');
+  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics]);
 
-  // Handle done interview (user wants to finish with current response)
+  // Handle done interview
   const handleDoneInterview = useCallback(() => {
     if (isFinished) return;
     
-    // TODO: Replace with custom modal component
     const confirmDone = window.confirm(UI_TEXT.SKIP_CONFIRMATION);
     if (!confirmDone) return;
     
+    console.log('✋ MANUAL completion');
     handleInterviewCompletion();
   }, [isFinished, handleInterviewCompletion]);
 
-  // Handle end interview (user wants to go back to question selection)
+  // Handle end interview
   const handleEndInterview = useCallback(() => {
     if (isFinished) return;
     
-    // TODO: Replace with custom modal component
     const confirmEnd = window.confirm(UI_TEXT.END_CONFIRMATION);
     if (!confirmEnd) return;
     
     setIsFinished(true);
     setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
     if (onEnd) onEnd();
   }, [isFinished, onEnd]);
 
-  // Toggle video card expansion
+  // Toggle video card
   const toggleVideoCard = useCallback(() => {
     setIsVideoCardExpanded(prev => !prev);
   }, []);
 
-  // Reset eye tracking metrics
-  const resetEyeTrackingMetrics = useCallback(() => {
-    setEyeTrackingMetrics({
+  // Reset metrics
+  const resetAllMetrics = useCallback(() => {
+    console.log('🔄 Resetting metrics');
+    
+    const resetEyeMetrics = {
       eyeContactPercentage: 0,
       smilePercentage: 0,
       gazeStatus: 'Initializing',
-      sessionTime: '00:00',
-      totalFrames: 0,
-      eyeContactFrames: 0,
-      smileFrames: 0
-    });
+      sessionTime: '00:00'
+    };
     
-    if (eyeTrackingResetRef.current) {
-      eyeTrackingResetRef.current();
-    }
+    const resetVoiceMetrics = {
+      volume: 0,
+      averageVolume: 0,
+      volumeVariation: 0,
+      pitchVariation: 60,
+      speechRate: 70,
+      clarity: 80,
+      totalSamples: 0
+    };
+    
+    setEyeTrackingMetrics(resetEyeMetrics);
+    setVoiceMetrics(resetVoiceMetrics);
+    latestEyeMetricsRef.current = null;
+    latestVoiceMetricsRef.current = null;
+    
+    // Call reset functions
+    if (window.eyeTrackingReset) window.eyeTrackingReset();
+    if (window.pitchAnalyzerReset) window.pitchAnalyzerReset();
   }, []);
 
-  // Initialize everything
+  // Initialize interview
   const initializeInterview = useCallback(async () => {
     if (isInitialized) return;
     
     try {
+      console.log('🚀 Initializing...');
       setIsInitialized(true);
       setupDotAnimation();
-      
-      // Reset eye tracking metrics
-      resetEyeTrackingMetrics();
+      resetAllMetrics();
       
       // Start media capture
-      const stream = await mediaStream.startCapture();
+      await mediaStream.startCapture();
       
-      // Start speech recognition or simulation
+      // Start speech recognition
       if (DevHelpers.isTranscriptSimulationEnabled()) {
         transcriptSimulation.startSimulation();
       } else {
         speechRecognition.startListening();
       }
       
-      // Start eye tracking
+      // Start analyses
       setIsEyeTrackingActive(true);
+      setIsVoiceAnalysisActive(true);
       
-      // Setup session timeout
+      // Setup timeout
       setupSessionTimeout();
       
-      DevHelpers.log('Interview initialized successfully with eye tracking');
+      console.log('✅ Initialization complete');
     } catch (error) {
-      DevHelpers.error('Failed to initialize interview:', error);
+      console.error('❌ Initialization failed:', error);
       setIsInitialized(false);
     }
-  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout, resetEyeTrackingMetrics]);
+  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout, resetAllMetrics]);
 
-  // Cleanup all resources
+  // Cleanup
   const cleanupAll = useCallback(() => {
     ResourceCleanup.cleanupAll({
       timeouts: [timeoutRef],
@@ -255,6 +284,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     speechRecognition.stopListening();
     transcriptSimulation.stopSimulation();
     setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
   }, [mediaStream, speechRecognition, transcriptSimulation]);
 
   // Auto-scroll effect
@@ -262,7 +292,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     scrollToBottom();
   }, [getLiveTranscript(), scrollToBottom]);
 
-  // Initialize on mount - only run once
+  // Initialize on mount
   useEffect(() => {
     if (!isInitialized) {
       initializeInterview();
@@ -272,9 +302,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       setIsFinished(true);
       cleanupAll();
     };
-  }, []); // Empty dependency array to run only once
+  }, []);
 
-  // Handle permission retry
+  // Handle retry
   const handleRetry = useCallback(() => {
     setIsInitialized(false);
     mediaStream.retryCapture();
@@ -291,10 +321,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     );
   }
 
-  // Main interview interface
   return (
     <div className="video-processor">
-      {/* Question display */}
+      {/* Question */}
       <div className="video-processor__question-section">
         <SelectedQuestionDisplay 
           questionId={selectedQuestion} 
@@ -304,7 +333,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       
       {/* Main content */}
       <div className="interview-content-wrapper">
-        {/* Video sidebar with interviewer view */}
+        {/* Video sidebar */}
         <div className="interview-sidebar">
           <VideoCard
             hasVideo={mediaStream.hasVideo}
@@ -317,9 +346,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
           />
         </div>
         
-        {/* Main content area with eye tracking metrics and transcript */}
+        {/* Main area */}
         <div className="interview-main">
-          {/* Eye Tracking Analysis - positioned in the middle */}
+          {/* Eye tracking */}
           <div className="interview-main__eye-tracking">
             <EyeTrackingAnalyzer
               videoRef={mediaStream.videoRef}
@@ -330,7 +359,37 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
             />
           </div>
           
-          {/* Transcript section */}
+          {/* Voice analysis */}
+          <div className="interview-main__voice-analysis">
+            <PitchAnalyzer
+              mediaStream={mediaStream.mediaStream}
+              isActive={isVoiceAnalysisActive}
+              onMetricsUpdate={handleVoiceMetricsUpdate}
+              className="interview-voice-analysis"
+            />
+          </div>
+          
+          {/* Simple debug panel */}
+          <div style={{
+            background: '#e8f5e8',
+            border: '2px solid #4ade80',
+            borderRadius: '8px',
+            padding: '12px',
+            marginBottom: '16px',
+            fontSize: '14px'
+          }}>
+            <strong>🔍 SIMPLE DEBUG:</strong>
+            <br />
+            Voice Average: {voiceMetrics.averageVolume}% | Variation: {voiceMetrics.volumeVariation}% | Samples: {voiceMetrics.totalSamples}
+            <br />
+            Eye Contact: {eyeTrackingMetrics.eyeContactPercentage}% | Smile: {eyeTrackingMetrics.smilePercentage}%
+            <br />
+            <strong style={{ color: voiceMetrics.averageVolume > 5 ? 'green' : 'red' }}>
+              Voice Status: {voiceMetrics.averageVolume > 5 ? '✅ DETECTED' : '❌ NOT DETECTED'}
+            </strong>
+          </div>
+          
+          {/* Transcript */}
           <div className="transcript-main">
             <div className="transcript-main__header">
               <h3 className="transcript-main__title">
@@ -357,7 +416,6 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
         <button 
           className="button interview-layout__end-button"
           onClick={handleEndInterview}
-          aria-label="End interview and return to selection"
         >
           <i className="fas fa-times icon-sm"></i>
           {UI_TEXT.END_INTERVIEW}
@@ -365,7 +423,6 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
         <button 
           className="button interview-layout__done-button"
           onClick={handleDoneInterview}
-          aria-label="Finish interview with current response"
         >
           <i className="fas fa-check icon-sm"></i>
           {UI_TEXT.SKIP_INTERVIEW}
