@@ -1,0 +1,231 @@
+/**
+ * Eye Tracking Analyzer Styles
+ * Integrated styling for the facial recognition component
+ */
+
+.eye-tracking-analyzer {
+  position: relative;
+  width: 100%;
+  background: var(--card-bg, #ffffff);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+.eye-tracking-canvas {
+  display: block;
+  border-radius: 8px;
+}
+
+.eye-tracking-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.eye-tracking-metrics {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.eye-tracking-status {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.eye-tracking-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.eye-tracking-status-text {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.eye-tracking-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.eye-tracking-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s ease;
+}
+
+.eye-tracking-stat:hover {
+  background: #f3f4f6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.eye-tracking-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  transition: color 0.3s ease;
+}
+
+.eye-tracking-stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+/* Integration with VideoCard */
+.video-card .eye-tracking-analyzer {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 280px;
+  background: rgba(42, 42, 42, 0.95);
+  border: 1px solid #404040;
+  z-index: 20;
+}
+
+.video-card .eye-tracking-metrics {
+  background: rgba(42, 42, 42, 0.95);
+  border: 1px solid #404040;
+}
+
+.video-card .eye-tracking-title {
+  color: #ffffff;
+}
+
+.video-card .eye-tracking-status-text {
+  color: #d1d5db;
+}
+
+.video-card .eye-tracking-stat {
+  background: rgba(31, 41, 55, 0.8);
+  border: 1px solid #404040;
+}
+
+.video-card .eye-tracking-stat:hover {
+  background: rgba(31, 41, 55, 1);
+}
+
+.video-card .eye-tracking-stat-label {
+  color: #9ca3af;
+}
+
+/* Integration with main transcript area */
+.interview-main .eye-tracking-analyzer {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+}
+
+.interview-main .eye-tracking-analyzer .eye-tracking-metrics {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e5e7eb;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .eye-tracking-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .video-card .eye-tracking-analyzer {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .eye-tracking-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .eye-tracking-stat {
+    padding: 8px;
+  }
+  
+  .eye-tracking-stat-value {
+    font-size: 16px;
+  }
+  
+  .eye-tracking-stat-label {
+    font-size: 11px;
+  }
+}
+
+/* Animation for metrics updates */
+.eye-tracking-stat-value {
+  transition: all 0.3s ease;
+}
+
+.eye-tracking-stat-value.updated {
+  transform: scale(1.1);
+  animation: metric-pulse 0.6s ease;
+}
+
+@keyframes metric-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Status indicators */
+.eye-tracking-analyzer.status-good .eye-tracking-title {
+  color: #059669;
+}
+
+.eye-tracking-analyzer.status-warning .eye-tracking-title {
+  color: #d97706;
+}
+
+.eye-tracking-analyzer.status-error .eye-tracking-title {
+  color: #dc2626;
+}
+
+/* Loading state */
+.eye-tracking-analyzer.loading .eye-tracking-metrics {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.eye-tracking-analyzer.loading .eye-tracking-title::after {
+  content: "...";
+  animation: loading-dots 1.5s infinite;
+}
+
+@keyframes loading-dots {
+  0%, 20% { content: ""; }
+  40% { content: "."; }
+  60% { content: ".."; }
+  80%, 100% { content: "..."; }
+}

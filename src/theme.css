@@ -2304,4 +2304,349 @@ html {
     gap: var(--spacing-xs);
   }
 }
+/* Interviewer View Video Container */
+.video-card__interviewer-view {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+}
+
+.video-card__interviewer-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* Mirror the video like the main feed */
+}
+
+/* Landmark Canvas Overlay */
+.video-card__landmark-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 8px;
+}
+
+/* Enhanced Video Card Layout */
+.video-card__video-container {
+  margin-bottom: 12px;
+}
+
+.video-card__video-container:last-child {
+  margin-bottom: 0;
+}
+
+.video-card__video-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.video-card__video-label small {
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.video-card__video-box {
+  width: 100%;
+  height: 160px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+  background: #000;
+}
+
+.video-card__video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Placeholder styles for non-video items */
+.video-card__video-box--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+}
+
+.video-card__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: #64748b;
+}
+
+.video-card__placeholder-icon {
+  font-size: 24px;
+  opacity: 0.6;
+}
+
+.video-card__placeholder-text span {
+  font-size: 14px;
+  font-weight: 500;
+  display: block;
+}
+
+.video-card__placeholder-text small {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+/* Audio only placeholder */
+.video-card__audio-only-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #64748b;
+}
+
+.video-card__audio-only-icon {
+  font-size: 28px;
+  color: #3b82f6;
+}
+
+.video-card__audio-only-text h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.video-card__audio-only-text p {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Expanded state adjustments */
+.video-card--expanded .video-card__video-box {
+  height: 140px; /* Slightly smaller when expanded to fit more content */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .video-card__video-box {
+    height: 120px;
+  }
+  
+  .video-card--expanded .video-card__video-box {
+    height: 100px;
+  }
+  
+  .video-card__video-label {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+  
+  .video-card__placeholder-icon {
+    font-size: 20px;
+  }
+  
+  .video-card__placeholder-text span {
+    font-size: 12px;
+  }
+}
+
+/* Focus and hover states */
+.video-card__video-container:hover .video-card__video-label {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.video-card__video-container:hover .video-card__video-box {
+  border-color: #cbd5e1;
+}
+
+/* Special styling for interviewer view with active landmarks */
+.video-card__interviewer-view.landmarks-active {
+  box-shadow: 0 0 0 2px #10b981;
+}
+
+.video-card__interviewer-view.landmarks-active .video-card__video-label {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #065f46;
+  border-color: #10b981;
+}
+
+/* Animation for landmark detection */
+@keyframes landmark-detection {
+  0% { box-shadow: 0 0 0 2px transparent; }
+  50% { box-shadow: 0 0 0 2px #10b981; }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+
+.video-card__landmark-canvas.detecting {
+  animation: landmark-detection 2s infinite;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .video-card__video-label {
+    background: #374151;
+    color: #d1d5db;
+    border-color: #4b5563;
+  }
+  
+  .video-card__video-box--placeholder {
+    background: #374151;
+    border-color: #6b7280;
+  }
+  
+  .video-card__placeholder {
+    color: #9ca3af;
+  }
+  
+  .video-card__audio-only-text h4 {
+    color: #f9fafb;
+  }
+  
+  .video-card__audio-only-text p {
+    color: #9ca3af;
+  }
+}
+
+/* ==========================================================================
+   Computer Vision Analysis Section - Add to theme.css
+   ========================================================================== */
+
+.cv-analysis {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 2px solid var(--color-primary-medium);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.cv-analysis__title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0 0 var(--spacing-lg) 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  text-align: center;
+  justify-content: center;
+}
+
+.cv-analysis__metrics {
+  display: flex;
+  justify-content: space-around;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.cv-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-md);
+  background: var(--color-white);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  min-width: 120px;
+  flex: 1;
+  transition: all var(--transition-normal);
+}
+
+.cv-metric:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.cv-metric__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary-medium));
+  border-radius: 50%;
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-primary-dark);
+  font-size: 18px;
+}
+
+.cv-metric__content {
+  text-align: center;
+}
+
+.cv-metric__value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-xs);
+  line-height: 1;
+}
+
+.cv-metric__label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Responsive design for CV analysis */
+@media (max-width: 768px) {
+  .cv-analysis__metrics {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  
+  .cv-metric {
+    flex-direction: row;
+    text-align: left;
+    padding: var(--spacing-sm);
+  }
+  
+  .cv-metric__icon {
+    margin-bottom: 0;
+    margin-right: var(--spacing-sm);
+    width: 35px;
+    height: 35px;
+    font-size: 16px;
+  }
+  
+  .cv-metric__content {
+    text-align: left;
+  }
+  
+  .cv-metric__value {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .cv-analysis {
+    padding: var(--spacing-md);
+  }
+  
+  .cv-metric__value {
+    font-size: 18px;
+  }
+  
+  .cv-metric__label {
+    font-size: 12px;
+  }
+}
 

@@ -1,9 +1,9 @@
 /**
  * Video Card Component
- * Displays video feed or audio-only placeholder with expand/collapse functionality
+ * Displays video feed with user video in Interviewer View and landmark overlay
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { DevHelpers } from '../config/devConfig';
 
 const VideoCard = React.memo(({ 
@@ -12,8 +12,11 @@ const VideoCard = React.memo(({
   isExpanded, 
   onToggle, 
   videoRef,
-  mediaStream
+  mediaStream,
+  eyeTrackingCanvasRef // New prop for eye tracking canvas
 }) => {
+  const interviewerVideoRef = useRef(); // Ref for the interviewer view video
+
   // Debug logging
   useEffect(() => {
     DevHelpers.log('VideoCard props:', {
@@ -26,112 +29,98 @@ const VideoCard = React.memo(({
     });
   }, [hasVideo, isAudioOnly, isExpanded, videoRef, mediaStream]);
 
-  // Set up video element when stream is available
+  // Set up both video elements when stream is available
   useEffect(() => {
-    if (mediaStream && videoRef?.current && hasVideo) {
-      const videoElement = videoRef.current;
-      
-      DevHelpers.log('Setting up video element with stream:', {
-        stream: mediaStream,
-        videoTracks: mediaStream.getVideoTracks().length,
-        audioTracks: mediaStream.getAudioTracks().length
-      });
-      
-      try {
-        videoElement.srcObject = mediaStream;
-        videoElement.muted = true;
-        videoElement.autoplay = true;
-        videoElement.playsInline = true;
+    if (mediaStream && hasVideo) {
+      // Set up main video element
+      if (videoRef?.current) {
+        const videoElement = videoRef.current;
         
-        // Add event listeners
-        videoElement.onloadedmetadata = () => {
-          DevHelpers.log('Video metadata loaded:', {
-            videoWidth: videoElement.videoWidth,
-            videoHeight: videoElement.videoHeight,
-            duration: videoElement.duration
+        DevHelpers.log('Setting up main video element with stream');
+        
+        try {
+          videoElement.srcObject = mediaStream;
+          videoElement.muted = true;
+          videoElement.autoplay = true;
+          videoElement.playsInline = true;
+          
+          videoElement.onloadedmetadata = () => {
+            DevHelpers.log('Main video metadata loaded');
+          };
+          
+          videoElement.play().catch(error => {
+            DevHelpers.error('Error starting main video playback:', error);
           });
-        };
+        } catch (error) {
+          DevHelpers.error('Error setting up main video element:', error);
+        }
+      }
+
+      // Set up interviewer view video element
+      if (interviewerVideoRef?.current) {
+        const interviewerVideoElement = interviewerVideoRef.current;
         
-        videoElement.oncanplay = () => {
-          DevHelpers.log('Video can play');
-        };
+        DevHelpers.log('Setting up interviewer view video element with stream');
         
-        videoElement.onplaying = () => {
-          DevHelpers.log('Video is playing');
-        };
-        
-        videoElement.onerror = (error) => {
-          DevHelpers.error('Video element error:', error);
-        };
-        
-        // Start playing
-        videoElement.play().catch(error => {
-          DevHelpers.error('Error starting video playback:', error);
-        });
-        
-        DevHelpers.log('Video element setup complete');
-      } catch (error) {
-        DevHelpers.error('Error setting up video element:', error);
+        try {
+          interviewerVideoElement.srcObject = mediaStream;
+          interviewerVideoElement.muted = true;
+          interviewerVideoElement.autoplay = true;
+          interviewerVideoElement.playsInline = true;
+          
+          interviewerVideoElement.onloadedmetadata = () => {
+            DevHelpers.log('Interviewer video metadata loaded');
+          };
+          
+          interviewerVideoElement.play().catch(error => {
+            DevHelpers.error('Error starting interviewer video playback:', error);
+          });
+        } catch (error) {
+          DevHelpers.error('Error setting up interviewer video element:', error);
+        }
       }
     }
   }, [mediaStream, videoRef, hasVideo]);
 
-  // Monitor video element
+  // Setup canvas overlay for interviewer view
   useEffect(() => {
-    if (videoRef?.current) {
-      const videoElement = videoRef.current;
-      DevHelpers.log('Video element found:', {
-        srcObject: videoElement.srcObject,
-        videoWidth: videoElement.videoWidth,
-        videoHeight: videoElement.videoHeight,
-        readyState: videoElement.readyState
-      });
+    if (eyeTrackingCanvasRef?.current && interviewerVideoRef?.current) {
+      const canvas = eyeTrackingCanvasRef.current;
+      const video = interviewerVideoRef.current;
       
-      // Check if we have access to the media stream through the parent component
-      if (videoElement.srcObject) {
-        const stream = videoElement.srcObject;
-        const videoTracks = stream.getVideoTracks();
-        const audioTracks = stream.getAudioTracks();
+      const updateCanvasSize = () => {
+        // Get the actual rendered size of the video element
+        const videoRect = video.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(video);
         
-        DevHelpers.log('Stream tracks:', {
-          videoTracks: videoTracks.length,
-          audioTracks: audioTracks.length,
-          videoTrackState: videoTracks[0]?.readyState,
-          videoTrackEnabled: videoTracks[0]?.enabled
+        canvas.width = video.offsetWidth;
+        canvas.height = video.offsetHeight;
+        
+        DevHelpers.log('Canvas sized to match interviewer video:', {
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          videoOffsetWidth: video.offsetWidth,
+          videoOffsetHeight: video.offsetHeight,
+          videoVideoWidth: video.videoWidth,
+          videoVideoHeight: video.videoHeight
         });
-        
-        // Check if video is actually playing
-        setTimeout(() => {
-          DevHelpers.log('Video playback status:', {
-            paused: videoElement.paused,
-            currentTime: videoElement.currentTime,
-            duration: videoElement.duration,
-            width: videoElement.videoWidth,
-            height: videoElement.videoHeight
-          });
-        }, 1000);
-      }
-    }
-  }, [videoRef, hasVideo]);
-
-  // Test function to manually get camera stream
-  const testVideoSetup = async () => {
-    try {
-      DevHelpers.log('Testing manual video setup...');
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      };
       
-      if (videoRef?.current) {
-        const videoElement = videoRef.current;
-        videoElement.srcObject = stream;
-        videoElement.muted = true;
-        videoElement.play();
-        
-        DevHelpers.log('Manual video setup successful');
+      const resizeObserver = new ResizeObserver(updateCanvasSize);
+      resizeObserver.observe(video);
+      
+      if (video.readyState >= 1) {
+        updateCanvasSize();
+      } else {
+        video.addEventListener('loadedmetadata', updateCanvasSize);
       }
-    } catch (error) {
-      DevHelpers.error('Manual video setup failed:', error);
+      
+      return () => {
+        resizeObserver.disconnect();
+        video.removeEventListener('loadedmetadata', updateCanvasSize);
+      };
     }
-  };
+  }, [eyeTrackingCanvasRef, hasVideo]);
 
   const renderMainVideo = () => {
     DevHelpers.log('Rendering main video:', { hasVideo, isAudioOnly });
@@ -142,12 +131,6 @@ const VideoCard = React.memo(({
           <div className="video-card__video-label">
             <i className="fas fa-video icon-sm"></i>
             Your Video
-            <button 
-              onClick={testVideoSetup}
-              style={{ marginLeft: '10px', fontSize: '12px', padding: '2px 6px' }}
-            >
-              Test Video
-            </button>
           </div>
           <div className="video-card__video-box">
             <video 
@@ -157,10 +140,6 @@ const VideoCard = React.memo(({
               playsInline 
               muted
               style={{ backgroundColor: '#000' }}
-              onLoadedMetadata={() => DevHelpers.log('Video metadata loaded')}
-              onCanPlay={() => DevHelpers.log('Video can play')}
-              onPlaying={() => DevHelpers.log('Video is playing')}
-              onError={(e) => DevHelpers.error('Video error:', e)}
             />
           </div>
         </div>
@@ -206,45 +185,85 @@ const VideoCard = React.memo(({
     );
   };
 
-  const renderAdditionalVideos = () => {
+  const renderInterviewerView = () => {
     if (!isExpanded) return null;
     
-    return (
-      <>
-        {/* Additional video feed 1 */}
+    // Show user's video in interviewer view with landmark overlay
+    if (hasVideo) {
+      return (
         <div className="video-card__video-container">
           <div className="video-card__video-label">
             <i className="fas fa-user icon-sm"></i>
             Interviewer View
+            <small style={{ marginLeft: '8px', opacity: 0.7 }}>with Eye Tracking</small>
           </div>
-          <div className="video-card__video-box video-card__video-box--placeholder">
-            <div className="video-card__placeholder">
-              <i className="fas fa-user video-card__placeholder-icon"></i>
-              <div className="video-card__placeholder-text">
-                <span>Interviewer</span>
-                <small>Simulated view</small>
-              </div>
+          <div className="video-card__video-box video-card__interviewer-view">
+            <video 
+              ref={interviewerVideoRef}
+              className="video-card__video-element video-card__interviewer-video"
+              autoPlay 
+              playsInline 
+              muted
+              style={{ backgroundColor: '#000' }}
+            />
+            {/* Canvas overlay for facial landmarks */}
+            <canvas 
+              ref={eyeTrackingCanvasRef}
+              className="video-card__landmark-canvas"
+              style={{ 
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                zIndex: 10
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // Fallback for no video
+    return (
+      <div className="video-card__video-container">
+        <div className="video-card__video-label">
+          <i className="fas fa-user icon-sm"></i>
+          Interviewer View
+        </div>
+        <div className="video-card__video-box video-card__video-box--placeholder">
+          <div className="video-card__placeholder">
+            <i className="fas fa-user video-card__placeholder-icon"></i>
+            <div className="video-card__placeholder-text">
+              <span>Interviewer</span>
+              <small>No video available</small>
             </div>
           </div>
         </div>
-        
-        {/* Additional video feed 2 */}
-        <div className="video-card__video-container">
-          <div className="video-card__video-label">
-            <i className="fas fa-desktop icon-sm"></i>
-            Screen Share
-          </div>
-          <div className="video-card__video-box video-card__video-box--placeholder">
-            <div className="video-card__placeholder">
-              <i className="fas fa-desktop video-card__placeholder-icon"></i>
-              <div className="video-card__placeholder-text">
-                <span>Screen Share</span>
-                <small>Not active</small>
-              </div>
+      </div>
+    );
+  };
+
+  const renderScreenShare = () => {
+    if (!isExpanded) return null;
+    
+    return (
+      <div className="video-card__video-container">
+        <div className="video-card__video-label">
+          <i className="fas fa-desktop icon-sm"></i>
+          Screen Share
+        </div>
+        <div className="video-card__video-box video-card__video-box--placeholder">
+          <div className="video-card__placeholder">
+            <i className="fas fa-desktop video-card__placeholder-icon"></i>
+            <div className="video-card__placeholder-text">
+              <span>Screen Share</span>
+              <small>Not active</small>
             </div>
           </div>
         </div>
-      </>
+      </div>
     );
   };
 
@@ -268,8 +287,11 @@ const VideoCard = React.memo(({
         {/* Main video - always shown */}
         {renderMainVideo()}
         
-        {/* Additional videos - only when expanded */}
-        {renderAdditionalVideos()}
+        {/* Interviewer view - now shows user's video with landmarks */}
+        {renderInterviewerView()}
+        
+        {/* Screen share - placeholder */}
+        {renderScreenShare()}
       </div>
     </div>
   );
@@ -277,4 +299,4 @@ const VideoCard = React.memo(({
 
 VideoCard.displayName = 'VideoCard';
 
-export default VideoCard; 
+export default VideoCard;
