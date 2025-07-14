@@ -1,235 +1,231 @@
 /**
- * Mockly AI Interview Application
- * Main application component that manages interview flow and state
- * 
- * @author: David Chung
- * @creation-date: 6/22/2025
+ * Main App Component
+ * Handles interview flow and state management
+ * WITH DEBUGGING FOR EYE TRACKING DATA FLOW
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
+import AuthModal from './components/AuthModal';
+import UserProfile from './components/UserProfile';
 import InterviewSession from './components/InterviewSession';
 import VideoAudioProcessor from './components/VideoAudioProcessor';
 import FeedbackReport from './components/FeedbackReport';
-import UserProfile from './components/UserProfile';
-import AuthModal from './components/AuthModal';
-import { AuthProvider } from './contexts/AuthContext';
-import { APP_STATES, UI_TEXT, DEFAULT_TIPS, DEV_MESSAGES } from './constants/interviewConstants';
-import { CONFIG } from './config';
+import ProcessingScreen from './components/ProcessingScreen';
 import { DevHelpers } from './config/devConfig';
-import { SCORE_THRESHOLDS, ErrorHandler } from './utils/interviewUtils';
 import './theme.css';
 
-// Default response for fallback scenarios
-const createDefaultResponse = (metrics, transcript) => ({
-  content_score: SCORE_THRESHOLDS.GOOD,
-  voice_score: metrics.voice?.score || 3.5,
-  face_score: metrics.face?.score || 4.2,
-  tips: DEFAULT_TIPS,
-  transcript_debug: transcript
-});
-
-// API service class for better separation of concerns
-class InterviewApiService {
-  constructor(config) {
-    this.config = config;
-  }
-
-  async makeRequest(endpoint, requestBody) {
-    try {
-      const response = await fetch(`${this.config.api.baseUrl}${endpoint}`, {
-        method: 'POST',
-        headers: this.config.api.headers,
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return response.json();
-    } catch (error) {
-      throw ErrorHandler.handleApiError(error, `API request to ${endpoint}`);
-    }
-  }
-
-  async requestComprehensiveAnalysis(metrics, transcript) {
-    return this.makeRequest(
-      this.config.api.endpoints.comprehensiveAnalysis, 
-      { metrics, transcript }
-    );
-  }
-
-  async requestScoreSession(metrics, transcript) {
-    return this.makeRequest(
-      this.config.api.endpoints.scoreSession, 
-      { metrics, transcript }
-    );
-  }
-}
-
-const AppContent = React.memo(() => {
-  const [interviewReport, setInterviewReport] = useState(null);
-  const [currentState, setCurrentState] = useState(APP_STATES.INITIAL);
+const App = () => {
+  // App state
+  const [currentView, setCurrentView] = useState('interview'); // 'interview', 'processing', 'feedback', 'profile'
   const [selectedQuestion, setSelectedQuestion] = useState('');
-  const [currentView, setCurrentView] = useState('interview'); // 'interview' | 'profile'
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [feedbackReport, setFeedbackReport] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true); // Track if this is the first load
-  
-  // Memoize apiService to prevent re-instantiation on every render
-  const apiService = useMemo(() => new InterviewApiService(CONFIG), []);
 
-  // Memoize class name calculations
-  const containerClassName = useMemo(() => {
-    const isExpanded = currentState !== APP_STATES.INITIAL;
-    return isExpanded ? 'app app--expanded' : 'app';
-  }, [currentState]);
-
-  const cardClassName = useMemo(() => {
-    const baseClass = 'card';
-    let variantClass = '';
-
-    switch (currentState) {
-      case APP_STATES.INITIAL:
-        variantClass = 'card--dynamic';
-        break;
-      case APP_STATES.INTERVIEWING:
-        variantClass = 'card--interview card--fixed';
-        break;
-      case APP_STATES.PROCESSING:
-        variantClass = 'card--processing card--dynamic';
-        break;
-      case APP_STATES.FEEDBACK:
-        variantClass = 'card--feedback card--fixed';
-        break;
-      default:
-        variantClass = 'card--dynamic';
+  // Enhanced interview finish handler with debugging
+  const handleInterviewFinish = useCallback((metrics, transcript) => {
+    console.log('🎯 STEP 4 - Parent component (App) received onFinish callback');
+    console.log('📊 Received metrics:', metrics);
+    console.log('📝 Received transcript:', transcript);
+    console.log('🔍 Metrics JSON:', JSON.stringify(metrics, null, 2));
+    console.log('🔍 Metrics keys:', Object.keys(metrics || {}));
+    
+    // Check if eye tracking data is still present
+    if (metrics.eyeTracking || metrics.eye_tracking) {
+      console.log('✅ Eye tracking data is present in parent component');
+      console.log('👁️ Eye tracking data:', metrics.eyeTracking || metrics.eye_tracking);
+    } else {
+      console.log('❌ Eye tracking data is MISSING in parent component');
     }
 
-    // Only add animation class on initial load, not during navigation
-    const shouldAnimate = isInitialLoad && (currentState === APP_STATES.INITIAL || currentState === APP_STATES.FEEDBACK);
-    const animationClass = shouldAnimate ? 'animate-on-scroll' : '';
+    // Check individual fields
+    console.log('👁️ Individual eye tracking fields:', {
+      eyeContactPercentage: metrics.eyeContactPercentage,
+      smilePercentage: metrics.smilePercentage,
+      sessionDuration: metrics.sessionDuration
+    });
+    
+    setIsProcessing(true);
+    setCurrentView('processing');
 
-    return `${baseClass} ${variantClass} ${animationClass}`.trim();
-  }, [currentState, isInitialLoad]);
-
-  // Shared analysis logic to avoid duplication
-  const processAnalysisResult = useCallback((analysisData) => {
-    setInterviewReport(analysisData);
-    setCurrentState(APP_STATES.FEEDBACK);
-  }, []);
-
-  const handleAnalysisError = useCallback((error, metrics, transcript) => {
-    DevHelpers.error('Analysis error:', error);
-    const defaultResponse = createDefaultResponse(metrics, transcript);
-    setInterviewReport(defaultResponse);
-    setCurrentState(APP_STATES.FEEDBACK);
-  }, []);
-
-  // Consolidated analysis handler
-  const handleAnalysisRequest = useCallback(async (
-    primaryEndpoint, 
-    fallbackEndpoint, 
-    metrics, 
-    transcript
-  ) => {
+    // Simulate processing or make API call
     if (DevHelpers.isApiDisabled()) {
-      DevHelpers.log(DEV_MESSAGES.API_DISABLED);
-      await DevHelpers.simulateApiDelay();
-      processAnalysisResult(DevHelpers.getMockResponse());
-      return;
+      // Mock processing for development
+      console.log('🔧 STEP 5 - Mock processing (Dev mode)');
+      handleMockProcessing(metrics, transcript);
+    } else {
+      // Real API call
+      console.log('🌐 STEP 5 - Real API processing');
+      handleRealProcessing(metrics, transcript);
     }
+  }, []);
 
-    try {
-      const analysisData = await apiService[primaryEndpoint](metrics, transcript);
-      processAnalysisResult(analysisData);
-    } catch (error) {
-      if (fallbackEndpoint) {
-        try {
-          const fallbackData = await apiService[fallbackEndpoint](metrics, transcript);
-          processAnalysisResult(fallbackData);
-        } catch (fallbackError) {
-          handleAnalysisError(fallbackError, metrics, transcript);
-        }
-      } else {
-        handleAnalysisError(error, metrics, transcript);
-      }
-    }
-  }, [apiService, processAnalysisResult, handleAnalysisError]);
-
-  // Event handlers
-  const handleInterviewComplete = useCallback((metrics, transcript) => {
-    setCurrentState(APP_STATES.PROCESSING);
-    // Small delay to show processing screen before starting API call
+  // Mock processing function with debugging
+  const handleMockProcessing = useCallback((metrics, transcript) => {
+    console.log('🔧 STEP 5A - Mock processing started');
+    console.log('📤 Input metrics to mock processing:', metrics);
+    console.log('📝 Input transcript to mock processing:', transcript);
+    
+    // Simulate processing delay
     setTimeout(() => {
-      handleAnalysisRequest(
-        'requestComprehensiveAnalysis',
-        'requestScoreSession',
-        metrics,
-        transcript
-      );
-    }, 500);
-  }, [handleAnalysisRequest]);
-
-  const handleInterviewStart = useCallback((questionId) => {
-    setSelectedQuestion(questionId);
-    setCurrentState(APP_STATES.INTERVIEWING);
-    setIsInitialLoad(false); // Mark as no longer initial load
-  }, []);
-
-  const handleStartNewInterview = useCallback(() => {
-    setInterviewReport(null);
-    setSelectedQuestion('');
-    setCurrentState(APP_STATES.INITIAL);
-    setCurrentView('interview');
-  }, []);
-
-  const handleInterviewCleanup = useCallback(() => {
-    setInterviewReport(null);
-    setSelectedQuestion('');
-    setCurrentState(APP_STATES.INITIAL);
-    setIsInitialLoad(false);
-  }, []);
-
-  const handleNavigateToProfile = useCallback(() => {
-    // Check if user is in an active interview session
-    if (currentState === APP_STATES.INTERVIEWING) {
-      const confirmEndInterview = window.confirm(UI_TEXT.NAVIGATION_CONFIRMATION);
-      if (!confirmEndInterview) {
-        return; // Cancel navigation
+      const mockResponse = {
+        content_score: 4.2,
+        voice_score: 3.8,
+        face_score: 4,
+        star_analysis: {
+          situation: ['I was working as a software engineer at a tech startup'],
+          task: ['I needed to implement a new feature within a tight deadline'],
+          action: ['I broke down the problem, created a detailed plan, and collaborated with the team'],
+          result: ['We delivered the feature on time and received positive feedback from users']
+        },
+        tips: {
+          content: 'Excellent STAR method usage. Consider adding more specific metrics.',
+          voice: 'Good pace and clarity. Work on reducing filler words.',
+          face: 'Strong eye contact and confident posture. Great job!'
+        },
+        transcript_debug: transcript,
+        // IMPORTANT: Include the eye tracking data in the mock response
+        eyeTracking: metrics.eyeTracking,
+        eye_tracking: metrics.eye_tracking,
+        eyeContactPercentage: metrics.eyeContactPercentage,
+        smilePercentage: metrics.smilePercentage,
+        sessionDuration: metrics.sessionDuration,
+        // Also add to metrics object for compatibility
+        metrics: {
+          eyeTracking: metrics.eyeTracking,
+          eye_tracking: metrics.eye_tracking
+        }
+      };
+      
+      console.log('📥 STEP 5B - Mock response created:', mockResponse);
+      console.log('🔍 Mock response JSON:', JSON.stringify(mockResponse, null, 2));
+      
+      // Check if eye tracking data is preserved
+      if (mockResponse.eyeTracking || mockResponse.eye_tracking) {
+        console.log('✅ Eye tracking data preserved in mock response');
+        console.log('👁️ Eye tracking in mock response:', mockResponse.eyeTracking || mockResponse.eye_tracking);
+      } else {
+        console.log('❌ Eye tracking data LOST in mock response');
       }
       
-      // Clean up interview state before navigating
-      handleInterviewCleanup();
-    } else {
-      // If not in interview, just reset state normally
-      setCurrentState(APP_STATES.INITIAL);
-      setIsInitialLoad(false);
-    }
+      setFeedbackReport(mockResponse);
+      setIsProcessing(false);
+      setCurrentView('feedback');
+    }, 2000); // 2 second delay
+  }, []);
+
+  // Real API processing function with debugging
+  const handleRealProcessing = useCallback(async (metrics, transcript) => {
+    console.log('🌐 STEP 5A - Real API processing started');
+    console.log('📤 Input metrics to API:', metrics);
+    console.log('📝 Input transcript to API:', transcript);
     
+    const requestPayload = {
+      transcript,
+      metrics,
+      // Include eye tracking data explicitly in the payload
+      eyeContactPercentage: metrics.eyeContactPercentage,
+      smilePercentage: metrics.smilePercentage,
+      sessionDuration: metrics.sessionDuration,
+      eyeTracking: metrics.eyeTracking,
+      eye_tracking: metrics.eye_tracking,
+      selectedQuestion: selectedQuestion
+    };
+    
+    console.log('📤 STEP 5B - Final API request payload:', requestPayload);
+    console.log('🔍 Payload JSON:', JSON.stringify(requestPayload, null, 2));
+    
+    try {
+      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      
+      const response = await fetch(`${API_BASE_URL}/api/analyze-interview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Add any auth headers you need
+        },
+        body: JSON.stringify(requestPayload)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API responded with status: ${response.status}`);
+      }
+      
+      const responseData = await response.json();
+      
+      console.log('📥 STEP 5C - API response received:', responseData);
+      console.log('🔍 Response JSON:', JSON.stringify(responseData, null, 2));
+      console.log('📊 Response keys:', Object.keys(responseData || {}));
+      
+      // Check if eye tracking data is in the response
+      if (responseData.eyeTracking || responseData.eye_tracking) {
+        console.log('✅ Eye tracking data preserved in API response');
+        console.log('👁️ Eye tracking in response:', responseData.eyeTracking || responseData.eye_tracking);
+      } else {
+        console.log('❌ Eye tracking data LOST in API response');
+        console.log('🔍 Available fields in response:', Object.keys(responseData));
+        
+        // Try to restore eye tracking data if it's missing
+        responseData.eyeTracking = metrics.eyeTracking;
+        responseData.eye_tracking = metrics.eye_tracking;
+        responseData.eyeContactPercentage = metrics.eyeContactPercentage;
+        responseData.smilePercentage = metrics.smilePercentage;
+        responseData.sessionDuration = metrics.sessionDuration;
+        
+        console.log('🔧 Restored eye tracking data to response:', responseData);
+      }
+      
+      setFeedbackReport(responseData);
+      setIsProcessing(false);
+      setCurrentView('feedback');
+      
+    } catch (error) {
+      console.error('❌ API error:', error);
+      
+      // Fallback to mock data if API fails
+      console.log('🔧 API failed, falling back to mock processing');
+      handleMockProcessing(metrics, transcript);
+    }
+  }, [selectedQuestion, handleMockProcessing]);
+
+  // Handle interview start
+  const handleInterviewStart = useCallback((questionId) => {
+    console.log('🎬 Starting interview with question:', questionId);
+    setSelectedQuestion(questionId);
+    setCurrentView('interview');
+    setFeedbackReport(null);
+  }, []);
+
+  // Handle interview end (back to question selection)
+  const handleInterviewEnd = useCallback(() => {
+    console.log('🛑 Interview ended, returning to question selection');
+    setCurrentView('interview');
+    setSelectedQuestion('');
+    setFeedbackReport(null);
+    setIsProcessing(false);
+  }, []);
+
+  // Handle start new interview from feedback
+  const handleStartNewInterview = useCallback(() => {
+    console.log('🔄 Starting new interview from feedback');
+    setCurrentView('interview');
+    setSelectedQuestion('');
+    setFeedbackReport(null);
+    setIsProcessing(false);
+  }, []);
+
+  // Navigation handlers
+  const handleNavigateToProfile = useCallback(() => {
     setCurrentView('profile');
-  }, [currentState, handleInterviewCleanup]);
+  }, []);
 
   const handleNavigateToInterview = useCallback(() => {
-    // Check if user is in an active interview session
-    if (currentState === APP_STATES.INTERVIEWING) {
-      const confirmEndInterview = window.confirm(UI_TEXT.NAVIGATION_CONFIRMATION);
-      if (!confirmEndInterview) {
-        return; // Cancel navigation
-      }
-      
-      // Clean up interview state before navigating
-      handleInterviewCleanup();
-    } else {
-      // If not in interview, just reset state normally
-      setCurrentState(APP_STATES.INITIAL);
-      setIsInitialLoad(false);
-    }
-    
     setCurrentView('interview');
-    setInterviewReport(null); // Clear any previous report
-    setSelectedQuestion(''); // Clear selected question
-  }, [currentState, handleInterviewCleanup]);
+    setSelectedQuestion('');
+    setFeedbackReport(null);
+  }, []);
 
   const handleShowAuthModal = useCallback(() => {
     setShowAuthModal(true);
@@ -239,159 +235,101 @@ const AppContent = React.memo(() => {
     setShowAuthModal(false);
   }, []);
 
-  // Memoized render functions
-  const renderInitialScreen = useCallback(() => (
-    <div className="card__content">
-      <h1 className="app__title">
-        <i className="fas fa-brain icon-sm icon-primary"></i>
-        {UI_TEXT.INITIAL_TITLE}
-      </h1>
-      <InterviewSession onStart={handleInterviewStart} />
-    </div>
-  ), [handleInterviewStart]);
-
-  const renderInterviewScreen = useCallback(() => (
-    <div className="card__content card__content--interview">
-      <VideoAudioProcessor 
-        onFinish={handleInterviewComplete} 
-        onEnd={handleStartNewInterview}
-        selectedQuestion={selectedQuestion}
-      />
-    </div>
-  ), [handleInterviewComplete, handleStartNewInterview, selectedQuestion]);
-
-  const renderProcessingScreen = useCallback(() => (
-    <div className="card__content">
-      <div className="processing-screen">
-        <div className="processing-screen__content">
-          <h3 className="processing-screen__title">
-            {UI_TEXT.PROCESSING_TITLE}
-          </h3>
-          <p className="processing-screen__message">{UI_TEXT.PROCESSING_MESSAGE}</p>
-          <div className="processing-screen__spinner">
-            <div className="processing-screen__spinner-element"></div>
+  // Render current view
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'profile':
+        return (
+          <UserProfile onNavigateToInterview={handleNavigateToInterview} />
+        );
+        
+      case 'processing':
+        return (
+          <div className="app__main">
+            <div className="app__container">
+              <ProcessingScreen />
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
-  ), []);
-
-  const renderFeedbackScreen = useCallback(() => (
-    <div className="card__content">
-      <h1 className="app__title">
-        <i className="fas fa-chart-line icon-sm icon-success"></i>
-        {UI_TEXT.FEEDBACK_TITLE}
-      </h1>
-      <FeedbackReport report={interviewReport} />
-      <div className="card__footer">
-        <button 
-          className="button button--centered" 
-          onClick={handleStartNewInterview}
-        >
-          <i className="fas fa-redo icon-sm"></i>
-          {UI_TEXT.START_NEW_INTERVIEW}
-        </button>
-      </div>
-    </div>
-  ), [interviewReport, handleStartNewInterview]);
-
-  // Memoized content renderer
-  const renderContent = useCallback(() => {
-    switch (currentState) {
-      case APP_STATES.INITIAL:
-        return renderInitialScreen();
-      case APP_STATES.INTERVIEWING:
-        return renderInterviewScreen();
-      case APP_STATES.PROCESSING:
-        return renderProcessingScreen();
-      case APP_STATES.FEEDBACK:
-        return renderFeedbackScreen();
+        );
+        
+      case 'feedback':
+        return (
+          <div className="app__main">
+            <div className="app__container">
+              <div className="card card--feedback">
+                <div className="card__content">
+                  <FeedbackReport report={feedbackReport} />
+                  <div className="card__footer">
+                    <button 
+                      className="button button--full-width"
+                      onClick={handleStartNewInterview}
+                    >
+                      <i className="fas fa-plus icon-sm"></i>
+                      Start New Interview
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+        
+      case 'interview':
       default:
-        return renderInitialScreen();
+        if (selectedQuestion) {
+          return (
+            <div className="app__main">
+              <div className="app__container">
+                <div className="card card--interview">
+                  <div className="card__content card__content--interview">
+                    <VideoAudioProcessor
+                      onFinish={handleInterviewFinish}
+                      onEnd={handleInterviewEnd}
+                      selectedQuestion={selectedQuestion}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        } else {
+          return (
+            <div className="app__main">
+              <div className="app__container">
+                <div className="card card--dynamic">
+                  <div className="card__content">
+                    <h1 className="app__title">Practice Interview</h1>
+                    <InterviewSession onStart={handleInterviewStart} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
     }
-  }, [currentState, renderInitialScreen, renderInterviewScreen, renderProcessingScreen, renderFeedbackScreen]);
-
-  // Optimized scroll animation effect - only run when new content is added
-  useEffect(() => {
-    // Only run for states that have new animatable content
-    if (currentState === APP_STATES.INITIAL || currentState === APP_STATES.FEEDBACK) {
-      const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-      };
-
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-          }
-        });
-      }, observerOptions);
-
-      // Small delay to ensure DOM is updated
-      const timer = setTimeout(() => {
-        document.querySelectorAll('.animate-on-scroll').forEach(el => {
-          observer.observe(el);
-          // If element is already in view, make it visible immediately
-          const rect = el.getBoundingClientRect();
-          if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-            el.classList.add('visible');
-          }
-        });
-      }, 100);
-
-      return () => {
-        clearTimeout(timer);
-        observer.disconnect();
-      };
-    }
-  }, [currentState]);
-
-  // Render different views based on current navigation
-  const renderMainContent = () => {
-    if (currentView === 'profile') {
-      return <UserProfile onNavigateToInterview={handleNavigateToInterview} />;
-    }
-
-    // Interview application views
-    return (
-      <div className={cardClassName}>
-        {renderContent()}
-      </div>
-    );
   };
 
   return (
-    <div className={containerClassName}>
-      <Header 
-        currentView={currentView}
-        onNavigateToProfile={handleNavigateToProfile}
-        onNavigateToInterview={handleNavigateToInterview}
-        onShowAuthModal={handleShowAuthModal}
-      />
-      <main className="app__main">
-        <div className="app__container">
-          {renderMainContent()}
-        </div>
-      </main>
-      <AuthModal 
-        isOpen={showAuthModal} 
-        onClose={handleCloseAuthModal}
-      />
-    </div>
-  );
-});
-
-// Main App component with AuthProvider
-const App = () => {
-  return (
     <AuthProvider>
-      <AppContent />
+      <div className="app">
+        <Header
+          currentView={currentView}
+          onNavigateToProfile={handleNavigateToProfile}
+          onNavigateToInterview={handleNavigateToInterview}
+          onShowAuthModal={handleShowAuthModal}
+        />
+        
+        {renderCurrentView()}
+        
+        {showAuthModal && (
+          <AuthModal
+            isOpen={showAuthModal}
+            onClose={handleCloseAuthModal}
+          />
+        )}
+      </div>
     </AuthProvider>
   );
 };
 
-App.displayName = 'App';
-
 export default App;
- 

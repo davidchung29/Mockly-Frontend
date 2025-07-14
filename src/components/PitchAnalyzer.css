@@ -1,0 +1,300 @@
+/**
+ * Pitch Analyzer Component Styles
+ * Voice analysis metrics display
+ */
+
+.pitch-analyzer {
+  background: var(--color-white, #ffffff);
+  border: 2px solid var(--color-primary-light, #EAF7F1);
+  border-radius: var(--border-radius-md, 13px);
+  padding: 16px;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08));
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.pitch-analyzer:hover {
+  border-color: var(--color-primary-medium, #acd5ca);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.06));
+}
+
+.pitch-analyzer__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-primary-light, #EAF7F1);
+}
+
+.pitch-analyzer__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-primary-dark, #205E4A);
+}
+
+.pitch-analyzer__status {
+  font-size: 14px;
+  color: var(--color-text-secondary, #6B7280);
+  font-weight: 500;
+  padding: 4px 8px;
+  background: var(--color-primary-light, #EAF7F1);
+  border-radius: 6px;
+  border: 1px solid var(--color-primary-medium, #acd5ca);
+}
+
+.pitch-analyzer__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.pitch-analyzer__metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  background: var(--color-background, #F9FAFB);
+  border-radius: 8px;
+  border: 1px solid var(--color-primary-light, #EAF7F1);
+  transition: all 0.2s ease;
+  min-height: 70px;
+  justify-content: center;
+}
+
+.pitch-analyzer__metric:hover {
+  background: var(--color-primary-light, #EAF7F1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 166, 118, 0.15);
+}
+
+.pitch-analyzer__value {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  transition: all 0.3s ease;
+  line-height: 1;
+}
+
+.pitch-analyzer__label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #6B7280);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Active animation for real-time updates */
+.pitch-analyzer__value.updating {
+  animation: metric-pulse 0.6s ease;
+}
+
+@keyframes metric-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Integration with main interview layout */
+.interview-main .pitch-analyzer {
+  background: var(--color-white, #ffffff);
+  border: 2px solid var(--color-primary-medium, #acd5ca);
+  margin-bottom: 16px;
+}
+
+/* Integration with video card area */
+.video-card .pitch-analyzer {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--color-primary-light, #EAF7F1);
+  backdrop-filter: blur(10px);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .pitch-analyzer__metrics {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  
+  .pitch-analyzer__metric {
+    padding: 10px 6px;
+    min-height: 60px;
+  }
+  
+  .pitch-analyzer__value {
+    font-size: 16px;
+  }
+  
+  .pitch-analyzer__label {
+    font-size: 10px;
+  }
+  
+  .pitch-analyzer__header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .pitch-analyzer__status {
+    align-self: stretch;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .pitch-analyzer {
+    padding: 12px;
+  }
+  
+  .pitch-analyzer__metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .pitch-analyzer__metric {
+    padding: 8px 4px;
+    min-height: 55px;
+  }
+  
+  .pitch-analyzer__value {
+    font-size: 14px;
+  }
+  
+  .pitch-analyzer__label {
+    font-size: 9px;
+  }
+}
+
+/* Loading state */
+.pitch-analyzer.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.pitch-analyzer.loading .pitch-analyzer__title::after {
+  content: "...";
+  animation: loading-dots 1.5s infinite;
+}
+
+@keyframes loading-dots {
+  0%, 20% { content: ""; }
+  40% { content: "."; }
+  60% { content: ".."; }
+  80%, 100% { content: "..."; }
+}
+
+/* Error state */
+.pitch-analyzer.error {
+  border-color: var(--color-error, #EF4444);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.pitch-analyzer.error .pitch-analyzer__title {
+  color: var(--color-error, #EF4444);
+}
+
+/* Voice activity indicator */
+.pitch-analyzer__metric.active {
+  background: linear-gradient(135deg, var(--color-success-bg, #ECFDF5) 0%, var(--color-primary-light, #EAF7F1) 100%);
+  border-color: var(--color-success, #10b981);
+}
+
+.pitch-analyzer__metric.active .pitch-analyzer__value {
+  color: var(--color-success, #10b981);
+}
+
+/* Real-time waveform animation effect */
+.pitch-analyzer__metric:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.pitch-analyzer__metric:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.pitch-analyzer__metric:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.pitch-analyzer__metric:nth-child(4) {
+  animation-delay: 0.3s;
+}
+
+.pitch-analyzer__metric:nth-child(5) {
+  animation-delay: 0.4s;
+}
+
+.pitch-analyzer__metric:nth-child(6) {
+  animation-delay: 0.5s;
+}
+
+/* Compact variant for sidebar integration */
+.pitch-analyzer--compact {
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.pitch-analyzer--compact .pitch-analyzer__metrics {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.pitch-analyzer--compact .pitch-analyzer__metric {
+  padding: 8px 6px;
+  min-height: 50px;
+}
+
+.pitch-analyzer--compact .pitch-analyzer__value {
+  font-size: 14px;
+}
+
+.pitch-analyzer--compact .pitch-analyzer__label {
+  font-size: 9px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .pitch-analyzer {
+    border-width: 3px;
+  }
+  
+  .pitch-analyzer__metric {
+    border-width: 2px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .pitch-analyzer {
+    background: #374151;
+    border-color: #4b5563;
+  }
+  
+  .pitch-analyzer__title {
+    color: #f9fafb;
+  }
+  
+  .pitch-analyzer__status {
+    background: #4b5563;
+    color: #d1d5db;
+    border-color: #6b7280;
+  }
+  
+  .pitch-analyzer__metric {
+    background: #4b5563;
+    border-color: #6b7280;
+  }
+  
+  .pitch-analyzer__metric:hover {
+    background: #6b7280;
+  }
+  
+  .pitch-analyzer__label {
+    color: #9ca3af;
+  }
+}
