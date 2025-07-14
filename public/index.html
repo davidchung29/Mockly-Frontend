@@ -6,10 +6,43 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#3BA676" />
-  <meta name="description" content="Mockly - AI-Powered Interview Practice Platform" />
+  <meta name="description" content="Mockly - AI-Powered Interview Practice Platform with Eye Contact Analysis" />
   <title>Mockly - AI Interview Practice</title>
+  
+  <!-- TensorFlow.js and FaceMesh for Eye Tracking - CORRECTED URLs -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/facemesh@0.0.3/dist/facemesh.js"></script>
 </head>
 <body>
   <div id="root"></div>
+  
+  <!-- Initialize TensorFlow.js backend -->
+  <script>
+    // Configure TensorFlow.js for optimal performance
+    if (typeof tf !== 'undefined') {
+      tf.ready().then(() => {
+        console.log('✅ TensorFlow.js backend initialized:', tf.getBackend());
+        console.log('✅ TensorFlow.js version:', tf.version.tfjs);
+        
+        // Check if FaceMesh is available
+        if (typeof facemesh !== 'undefined') {
+          console.log('✅ FaceMesh model is available');
+        } else {
+          console.warn('⚠️ FaceMesh model not loaded');
+        }
+        
+        // Prefer WebGL for better performance, fallback to CPU
+        if (tf.getBackend() !== 'webgl') {
+          tf.setBackend('webgl').catch(() => {
+            console.warn('⚠️ WebGL backend not available, using CPU backend');
+          });
+        }
+      }).catch(err => {
+        console.error('❌ TensorFlow.js initialization failed:', err);
+      });
+    } else {
+      console.error('❌ TensorFlow.js not loaded');
+    }
+  </script>
 </body>
 </html>

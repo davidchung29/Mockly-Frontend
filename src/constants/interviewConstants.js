@@ -102,6 +102,9 @@ export const DEFAULT_TIPS = {
   face: "Improve eye contact and maintain confident posture."
 };
 
+
+
+
 // Predefined behavioral interview questions
 export const INTERVIEW_QUESTIONS = [
   {

@@ -1,14 +1,15 @@
 /**
- * Video Audio Processor Component
- * Handles video/audio capture, speech recognition, and transcript processing
- * Refactored to use custom hooks and presentational components
+ * SIMPLE FIX - Direct Data Transfer
+ * Just make sure voice data gets to the feedback - no fancy stuff
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SelectedQuestionDisplay from './SelectedQuestionDisplay';
 import PermissionScreen from './PermissionScreen';
 import VideoCard from './VideoCard';
-import TranscriptDisplay from './TranscriptDisplay';
+import EyeTrackingAnalyzer from './EyeTrackingAnalyzer';
+import PitchAnalyzer from './PitchAnalyzer';
+import './PitchAnalyzer.css';
 import { useMediaStream } from '../hooks/useMediaStream';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { useTranscriptSimulation } from '../hooks/useTranscriptSimulation';
@@ -24,17 +25,43 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const [isFinished, setIsFinished] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   
-  // Refs for cleanup and scrolling
+  // Analysis state
+  const [eyeTrackingMetrics, setEyeTrackingMetrics] = useState({
+    eyeContactPercentage: 0,
+    smilePercentage: 0,
+    gazeStatus: 'Initializing',
+    sessionTime: '00:00'
+  });
+  
+  const [voiceMetrics, setVoiceMetrics] = useState({
+    volume: 0,
+    averageVolume: 0,
+    volumeVariation: 0,
+    pitchVariation: 60,
+    speechRate: 70,
+    clarity: 80,
+    totalSamples: 0
+  });
+  
+  const [isEyeTrackingActive, setIsEyeTrackingActive] = useState(false);
+  const [isVoiceAnalysisActive, setIsVoiceAnalysisActive] = useState(false);
+  
+  // ✅ SIMPLE: Just use current state values directly
+  const latestEyeMetricsRef = useRef(null);
+  const latestVoiceMetricsRef = useRef(null);
+  
+  // Other refs
   const transcriptScrollableRef = useRef();
   const dotIntervalRef = useRef();
   const timeoutRef = useRef();
+  const eyeTrackingCanvasRef = useRef();
 
-  // Custom hooks
+  // Hooks
   const mediaStream = useMediaStream();
   const speechRecognition = useSpeechRecognition();
   const transcriptSimulation = useTranscriptSimulation();
 
-  // Get the current transcript from appropriate source
+  // Get current transcript
   const getCurrentTranscript = useCallback(() => {
     if (DevHelpers.isTranscriptSimulationEnabled()) {
       return transcriptSimulation.getFinalTranscript();
@@ -42,7 +69,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     return speechRecognition.getFinalTranscript();
   }, [transcriptSimulation, speechRecognition]);
 
-  // Get the live transcript for display
+  // Get live transcript
   const getLiveTranscript = useCallback(() => {
     if (DevHelpers.isTranscriptSimulationEnabled()) {
       return transcriptSimulation.simulatedTranscript;
@@ -50,25 +77,36 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     return speechRecognition.transcript;
   }, [transcriptSimulation.simulatedTranscript, speechRecognition.transcript]);
 
-  // Listening dots animation
-  const setupDotAnimation = useCallback(() => {
-    if (dotIntervalRef.current) {
-      clearInterval(dotIntervalRef.current);
-    }
-    dotIntervalRef.current = setInterval(() => {
-      setListeningDots(prev => (prev.length >= INTERVIEW_CONFIG.maxDots ? '' : prev + '.'));
-    }, INTERVIEW_CONFIG.dotAnimationInterval);
+  // ✅ SIMPLE: Store metrics directly when received
+  const handleEyeTrackingUpdate = useCallback((metrics) => {
+    console.log('👁️ Eye tracking update:', metrics);
+    setEyeTrackingMetrics(metrics);
+    latestEyeMetricsRef.current = metrics; // Store immediately
   }, []);
 
-  // Session timeout
+  const handleVoiceMetricsUpdate = useCallback((metrics) => {
+    console.log('🎙️ Voice metrics update:', metrics);
+    setVoiceMetrics(metrics);
+    latestVoiceMetricsRef.current = metrics; // Store immediately
+    
+    console.log('🎙️ STORED in ref:', latestVoiceMetricsRef.current);
+  }, []);
+
+  // Dots animation
+  const setupDotAnimation = useCallback(() => {
+    if (dotIntervalRef.current) clearInterval(dotIntervalRef.current);
+    dotIntervalRef.current = setInterval(() => {
+      setListeningDots(prev => (prev.length >= 3 ? '' : prev + '.'));
+    }, 500);
+  }, []);
+
+  // ✅ SIMPLE: Session timeout
   const setupSessionTimeout = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       if (isFinished) return;
       
-      DevHelpers.log('Session timeout reached, finishing interview');
+      console.log('⏰ TIMEOUT - Completing interview');
       handleInterviewCompletion();
     }, INTERVIEW_CONFIG.sessionDuration);
   }, [isFinished]);
@@ -80,82 +118,160 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     }
   }, []);
 
-  // Handle interview completion
+  // ✅ SIMPLE: Main completion handler
   const handleInterviewCompletion = useCallback(() => {
     if (isFinished) return;
     
+    console.log('🎯 ===== COMPLETING INTERVIEW =====');
     setIsFinished(true);
+    setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
+    
+    // Get the LATEST metrics from refs (most recent data)
+    const finalEyeMetrics = latestEyeMetricsRef.current || eyeTrackingMetrics;
+    const finalVoiceMetrics = latestVoiceMetricsRef.current || voiceMetrics;
+    
+    console.log('📊 Final eye metrics:', finalEyeMetrics);
+    console.log('🎙️ Final voice metrics:', finalVoiceMetrics);
+    
     const completeTranscript = getCurrentTranscript();
     
-    DevHelpers.log('Interview completion:', { transcript: completeTranscript });
+    // ✅ SIMPLE: Build the final object with direct field assignment
+    const finalReport = {
+      // Default metrics
+      ...DEFAULT_METRICS,
+      
+      // Eye tracking - simple direct assignment
+      eyeContactPercentage: finalEyeMetrics?.eyeContactPercentage || 0,
+      smilePercentage: finalEyeMetrics?.smilePercentage || 0,
+      sessionDuration: finalEyeMetrics?.sessionTime || '00:00',
+      
+      // Voice analysis - simple direct assignment
+      averageVolume: finalVoiceMetrics?.averageVolume || 0,
+      volumeVariation: finalVoiceMetrics?.volumeVariation || 0,
+      pitchVariation: finalVoiceMetrics?.pitchVariation || 0,
+      speechRate: finalVoiceMetrics?.speechRate || 0,
+      clarity: finalVoiceMetrics?.clarity || 0,
+      totalSamples: finalVoiceMetrics?.totalSamples || 0,
+      
+      // Also include nested objects for backup
+      eyeTracking: finalEyeMetrics || {},
+      voiceAnalysis: finalVoiceMetrics || {}
+    };
     
+    console.log('🚀 FINAL REPORT OBJECT:');
+    console.log('averageVolume:', finalReport.averageVolume);
+    console.log('volumeVariation:', finalReport.volumeVariation);
+    console.log('totalSamples:', finalReport.totalSamples);
+    console.log('Full report:', finalReport);
+    
+    // Call onFinish
+    console.log('📞 Calling onFinish...');
     if (TranscriptValidator.isValid(completeTranscript)) {
-      onFinish(DEFAULT_METRICS, completeTranscript);
+      onFinish(finalReport, completeTranscript);
     } else {
-      // Replace alert with better UX - could be a modal in the future
-      DevHelpers.error(ERROR_MESSAGES.NO_SPEECH_DETECTED);
-      // For now, still proceed with empty transcript
-      onFinish(DEFAULT_METRICS, '');
+      onFinish(finalReport, '');
     }
-  }, [isFinished, getCurrentTranscript, onFinish]);
+    console.log('📞 onFinish called successfully');
+    
+    console.log('🎯 ===== COMPLETION DONE =====');
+  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics]);
 
-  // Handle done interview (user wants to finish with current response)
+  // Handle done interview
   const handleDoneInterview = useCallback(() => {
     if (isFinished) return;
     
-    // TODO: Replace with custom modal component
     const confirmDone = window.confirm(UI_TEXT.SKIP_CONFIRMATION);
     if (!confirmDone) return;
     
+    console.log('✋ MANUAL completion');
     handleInterviewCompletion();
   }, [isFinished, handleInterviewCompletion]);
 
-  // Handle end interview (user wants to go back to question selection)
+  // Handle end interview
   const handleEndInterview = useCallback(() => {
     if (isFinished) return;
     
-    // TODO: Replace with custom modal component
     const confirmEnd = window.confirm(UI_TEXT.END_CONFIRMATION);
     if (!confirmEnd) return;
     
     setIsFinished(true);
+    setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
     if (onEnd) onEnd();
   }, [isFinished, onEnd]);
 
-  // Toggle video card expansion
+  // Toggle video card
   const toggleVideoCard = useCallback(() => {
     setIsVideoCardExpanded(prev => !prev);
   }, []);
 
-  // Initialize everything
+  // Reset metrics
+  const resetAllMetrics = useCallback(() => {
+    console.log('🔄 Resetting metrics');
+    
+    const resetEyeMetrics = {
+      eyeContactPercentage: 0,
+      smilePercentage: 0,
+      gazeStatus: 'Initializing',
+      sessionTime: '00:00'
+    };
+    
+    const resetVoiceMetrics = {
+      volume: 0,
+      averageVolume: 0,
+      volumeVariation: 0,
+      pitchVariation: 60,
+      speechRate: 70,
+      clarity: 80,
+      totalSamples: 0
+    };
+    
+    setEyeTrackingMetrics(resetEyeMetrics);
+    setVoiceMetrics(resetVoiceMetrics);
+    latestEyeMetricsRef.current = null;
+    latestVoiceMetricsRef.current = null;
+    
+    // Call reset functions
+    if (window.eyeTrackingReset) window.eyeTrackingReset();
+    if (window.pitchAnalyzerReset) window.pitchAnalyzerReset();
+  }, []);
+
+  // Initialize interview
   const initializeInterview = useCallback(async () => {
     if (isInitialized) return;
     
     try {
+      console.log('🚀 Initializing...');
       setIsInitialized(true);
       setupDotAnimation();
+      resetAllMetrics();
       
       // Start media capture
-      const stream = await mediaStream.startCapture();
+      await mediaStream.startCapture();
       
-      // Start speech recognition or simulation
+      // Start speech recognition
       if (DevHelpers.isTranscriptSimulationEnabled()) {
         transcriptSimulation.startSimulation();
       } else {
         speechRecognition.startListening();
       }
       
-      // Setup session timeout
+      // Start analyses
+      setIsEyeTrackingActive(true);
+      setIsVoiceAnalysisActive(true);
+      
+      // Setup timeout
       setupSessionTimeout();
       
-      DevHelpers.log('Interview initialized successfully');
+      console.log('✅ Initialization complete');
     } catch (error) {
-      DevHelpers.error('Failed to initialize interview:', error);
+      console.error('❌ Initialization failed:', error);
       setIsInitialized(false);
     }
-  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout]);
+  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout, resetAllMetrics]);
 
-  // Cleanup all resources
+  // Cleanup
   const cleanupAll = useCallback(() => {
     ResourceCleanup.cleanupAll({
       timeouts: [timeoutRef],
@@ -167,6 +283,8 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     mediaStream.stopCapture();
     speechRecognition.stopListening();
     transcriptSimulation.stopSimulation();
+    setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
   }, [mediaStream, speechRecognition, transcriptSimulation]);
 
   // Auto-scroll effect
@@ -174,7 +292,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     scrollToBottom();
   }, [getLiveTranscript(), scrollToBottom]);
 
-  // Initialize on mount - only run once
+  // Initialize on mount
   useEffect(() => {
     if (!isInitialized) {
       initializeInterview();
@@ -184,9 +302,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       setIsFinished(true);
       cleanupAll();
     };
-  }, []); // Empty dependency array to run only once
+  }, []);
 
-  // Handle permission retry
+  // Handle retry
   const handleRetry = useCallback(() => {
     setIsInitialized(false);
     mediaStream.retryCapture();
@@ -203,10 +321,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     );
   }
 
-  // Main interview interface
   return (
     <div className="video-processor">
-      {/* Question display */}
+      {/* Question */}
       <div className="video-processor__question-section">
         <SelectedQuestionDisplay 
           questionId={selectedQuestion} 
@@ -225,14 +342,60 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
             onToggle={toggleVideoCard}
             videoRef={mediaStream.videoRef}
             mediaStream={mediaStream.mediaStream}
+            eyeTrackingCanvasRef={eyeTrackingCanvasRef}
           />
         </div>
         
-        {/* Transcript main area */}
+        {/* Main area */}
         <div className="interview-main">
+          {/* Eye tracking */}
+          <div className="interview-main__eye-tracking">
+            <EyeTrackingAnalyzer
+              videoRef={mediaStream.videoRef}
+              canvasRef={eyeTrackingCanvasRef}
+              isActive={isEyeTrackingActive}
+              onMetricsUpdate={handleEyeTrackingUpdate}
+              className="interview-eye-tracking"
+            />
+          </div>
+          
+          {/* Voice analysis */}
+          <div className="interview-main__voice-analysis">
+            <PitchAnalyzer
+              mediaStream={mediaStream.mediaStream}
+              isActive={isVoiceAnalysisActive}
+              onMetricsUpdate={handleVoiceMetricsUpdate}
+              className="interview-voice-analysis"
+            />
+          </div>
+          
+          {/* Simple debug panel */}
+          <div style={{
+            background: '#e8f5e8',
+            border: '2px solid #4ade80',
+            borderRadius: '8px',
+            padding: '12px',
+            marginBottom: '16px',
+            fontSize: '14px'
+          }}>
+            <strong>🔍 SIMPLE DEBUG:</strong>
+            <br />
+            Voice Average: {voiceMetrics.averageVolume}% | Variation: {voiceMetrics.volumeVariation}% | Samples: {voiceMetrics.totalSamples}
+            <br />
+            Eye Contact: {eyeTrackingMetrics.eyeContactPercentage}% | Smile: {eyeTrackingMetrics.smilePercentage}%
+            <br />
+            <strong style={{ color: voiceMetrics.averageVolume > 5 ? 'green' : 'red' }}>
+              Voice Status: {voiceMetrics.averageVolume > 5 ? '✅ DETECTED' : '❌ NOT DETECTED'}
+            </strong>
+          </div>
+          
+          {/* Transcript */}
           <div className="transcript-main">
             <div className="transcript-main__header">
-              <h3 className="transcript-main__title">Live Transcript</h3>
+              <h3 className="transcript-main__title">
+                <i className="fas fa-file-alt icon-sm"></i>
+                Live Transcript
+              </h3>
             </div>
             <div className="transcript-main__content" ref={transcriptScrollableRef}>
               <p className="transcript-main__text">
@@ -253,7 +416,6 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
         <button 
           className="button interview-layout__end-button"
           onClick={handleEndInterview}
-          aria-label="End interview and return to selection"
         >
           <i className="fas fa-times icon-sm"></i>
           {UI_TEXT.END_INTERVIEW}
@@ -261,7 +423,6 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
         <button 
           className="button interview-layout__done-button"
           onClick={handleDoneInterview}
-          aria-label="Finish interview with current response"
         >
           <i className="fas fa-check icon-sm"></i>
           {UI_TEXT.SKIP_INTERVIEW}
