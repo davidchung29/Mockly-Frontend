@@ -5,7 +5,7 @@
 
 // Interview session configuration
 export const INTERVIEW_CONFIG = {
-  sessionDuration: 10000, // 10 seconds
+  sessionDuration: 60000, // 60 seconds
   processingDelay: 200,
   fallbackTimeout: 3000,
   dotAnimationInterval: 500,

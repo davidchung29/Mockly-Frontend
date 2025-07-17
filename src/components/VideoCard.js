@@ -13,11 +13,11 @@ const VideoCard = React.memo(({
   onToggle, 
   videoRef,
   mediaStream,
-  eyeTrackingCanvasRef // New prop for eye tracking canvas
+  eyeTrackingCanvasRef,
+  handTrackingCanvasRef
 }) => {
-  const interviewerVideoRef = useRef(); // Ref for the interviewer view video
+  const interviewerVideoRef = useRef();
 
-  // Debug logging
   useEffect(() => {
     DevHelpers.log('VideoCard props:', {
       hasVideo,
@@ -29,25 +29,18 @@ const VideoCard = React.memo(({
     });
   }, [hasVideo, isAudioOnly, isExpanded, videoRef, mediaStream]);
 
-  // Set up both video elements when stream is available
   useEffect(() => {
     if (mediaStream && hasVideo) {
-      // Set up main video element
       if (videoRef?.current) {
         const videoElement = videoRef.current;
-        
-        DevHelpers.log('Setting up main video element with stream');
-        
         try {
           videoElement.srcObject = mediaStream;
           videoElement.muted = true;
           videoElement.autoplay = true;
           videoElement.playsInline = true;
-          
           videoElement.onloadedmetadata = () => {
             DevHelpers.log('Main video metadata loaded');
           };
-          
           videoElement.play().catch(error => {
             DevHelpers.error('Error starting main video playback:', error);
           });
@@ -56,22 +49,16 @@ const VideoCard = React.memo(({
         }
       }
 
-      // Set up interviewer view video element
       if (interviewerVideoRef?.current) {
         const interviewerVideoElement = interviewerVideoRef.current;
-        
-        DevHelpers.log('Setting up interviewer view video element with stream');
-        
         try {
           interviewerVideoElement.srcObject = mediaStream;
           interviewerVideoElement.muted = true;
           interviewerVideoElement.autoplay = true;
           interviewerVideoElement.playsInline = true;
-          
           interviewerVideoElement.onloadedmetadata = () => {
             DevHelpers.log('Interviewer video metadata loaded');
           };
-          
           interviewerVideoElement.play().catch(error => {
             DevHelpers.error('Error starting interviewer video playback:', error);
           });
@@ -82,39 +69,29 @@ const VideoCard = React.memo(({
     }
   }, [mediaStream, videoRef, hasVideo]);
 
-  // Setup canvas overlay for interviewer view
   useEffect(() => {
     if (eyeTrackingCanvasRef?.current && interviewerVideoRef?.current) {
       const canvas = eyeTrackingCanvasRef.current;
       const video = interviewerVideoRef.current;
-      
+
       const updateCanvasSize = () => {
-        // Get the actual rendered size of the video element
-        const videoRect = video.getBoundingClientRect();
-        const computedStyle = window.getComputedStyle(video);
-        
         canvas.width = video.offsetWidth;
         canvas.height = video.offsetHeight;
-        
-        DevHelpers.log('Canvas sized to match interviewer video:', {
+        DevHelpers.log('Eye canvas sized to match interviewer video:', {
           canvasWidth: canvas.width,
-          canvasHeight: canvas.height,
-          videoOffsetWidth: video.offsetWidth,
-          videoOffsetHeight: video.offsetHeight,
-          videoVideoWidth: video.videoWidth,
-          videoVideoHeight: video.videoHeight
+          canvasHeight: canvas.height
         });
       };
-      
+
       const resizeObserver = new ResizeObserver(updateCanvasSize);
       resizeObserver.observe(video);
-      
+
       if (video.readyState >= 1) {
         updateCanvasSize();
       } else {
         video.addEventListener('loadedmetadata', updateCanvasSize);
       }
-      
+
       return () => {
         resizeObserver.disconnect();
         video.removeEventListener('loadedmetadata', updateCanvasSize);
@@ -122,9 +99,37 @@ const VideoCard = React.memo(({
     }
   }, [eyeTrackingCanvasRef, hasVideo]);
 
+  useEffect(() => {
+    if (handTrackingCanvasRef?.current && interviewerVideoRef?.current) {
+      const canvas = handTrackingCanvasRef.current;
+      const video = interviewerVideoRef.current;
+
+      const updateCanvasSize = () => {
+        canvas.width = video.offsetWidth;
+        canvas.height = video.offsetHeight;
+        DevHelpers.log('Hand canvas sized to match interviewer video:', {
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height
+        });
+      };
+
+      const resizeObserver = new ResizeObserver(updateCanvasSize);
+      resizeObserver.observe(video);
+
+      if (video.readyState >= 1) {
+        updateCanvasSize();
+      } else {
+        video.addEventListener('loadedmetadata', updateCanvasSize);
+      }
+
+      return () => {
+        resizeObserver.disconnect();
+        video.removeEventListener('loadedmetadata', updateCanvasSize);
+      };
+    }
+  }, [handTrackingCanvasRef, hasVideo]);
+
   const renderMainVideo = () => {
-    DevHelpers.log('Rendering main video:', { hasVideo, isAudioOnly });
-    
     if (hasVideo) {
       return (
         <div className="video-card__video-container">
@@ -145,7 +150,6 @@ const VideoCard = React.memo(({
         </div>
       );
     }
-    
     if (isAudioOnly) {
       return (
         <div className="video-card__video-container">
@@ -165,7 +169,6 @@ const VideoCard = React.memo(({
         </div>
       );
     }
-    
     return (
       <div className="video-card__video-container">
         <div className="video-card__video-label">
@@ -187,26 +190,23 @@ const VideoCard = React.memo(({
 
   const renderInterviewerView = () => {
     if (!isExpanded) return null;
-    
-    // Show user's video in interviewer view with landmark overlay
     if (hasVideo) {
       return (
         <div className="video-card__video-container">
           <div className="video-card__video-label">
             <i className="fas fa-user icon-sm"></i>
             Interviewer View
-            <small style={{ marginLeft: '8px', opacity: 0.7 }}>with Eye Tracking</small>
+            <small style={{ marginLeft: '8px', opacity: 0.7 }}>with Eye + Hand Tracking</small>
           </div>
-          <div className="video-card__video-box video-card__interviewer-view">
+          <div className="video-card__video-box video-card__interviewer-view" style={{ position: 'relative' }}>
             <video 
               ref={interviewerVideoRef}
               className="video-card__video-element video-card__interviewer-video"
               autoPlay 
               playsInline 
               muted
-              style={{ backgroundColor: '#000' }}
+              style={{ backgroundColor: '#000', zIndex: 9 }}
             />
-            {/* Canvas overlay for facial landmarks */}
             <canvas 
               ref={eyeTrackingCanvasRef}
               className="video-card__landmark-canvas"
@@ -217,15 +217,29 @@ const VideoCard = React.memo(({
                 width: '100%',
                 height: '100%',
                 pointerEvents: 'none',
-                zIndex: 10
+                zIndex: 10,
+                background: 'transparent'
+              }}
+            />
+            <canvas
+              ref={handTrackingCanvasRef}
+              className="video-card__landmark-canvas"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                zIndex: 9999, // ensure highest stacking
+                border: '3px dashed red', // 👁️ clearly visible outline
+                backgroundColor: 'transparent' // prevent covering video
               }}
             />
           </div>
         </div>
       );
     }
-    
-    // Fallback for no video
     return (
       <div className="video-card__video-container">
         <div className="video-card__video-label">
@@ -247,7 +261,6 @@ const VideoCard = React.memo(({
 
   const renderScreenShare = () => {
     if (!isExpanded) return null;
-    
     return (
       <div className="video-card__video-container">
         <div className="video-card__video-label">
@@ -282,15 +295,9 @@ const VideoCard = React.memo(({
           <i className={`fas ${isExpanded ? 'fa-chevron-up' : 'fa-chevron-down'} video-card__arrow`}></i>
         </button>
       </div>
-      
       <div className="video-card__content">
-        {/* Main video - always shown */}
         {renderMainVideo()}
-        
-        {/* Interviewer view - now shows user's video with landmarks */}
         {renderInterviewerView()}
-        
-        {/* Screen share - placeholder */}
         {renderScreenShare()}
       </div>
     </div>
