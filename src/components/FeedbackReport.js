@@ -31,8 +31,18 @@ const FeedbackReport = React.memo(({ report }) => {
     };
   };
 
+  // Extract hand tracking data
+  const getHandData = () => {
+    return {
+      handMetrics: report?.handMetrics || [],
+      feedback: report?.feedback || 'No data',
+      hasData: report?.handMetrics && report.handMetrics.length > 0
+    };
+  };
+
   const voiceData = getVoiceData();
   const eyeData = getEyeData();
+  const handData = getHandData();
   
   // Check if we have meaningful data
   const hasVoiceData = voiceData.averageVolume > 0 || voiceData.totalSamples > 0;
@@ -40,6 +50,7 @@ const FeedbackReport = React.memo(({ report }) => {
 
   console.log('🎙️ Voice data:', voiceData, 'Has data:', hasVoiceData);
   console.log('👁️ Eye data:', eyeData, 'Has data:', hasEyeData);
+  console.log('🤲 Hand data:', handData, 'Has data:', handData.hasData);
 
   const renderScoreSection = () => (
     <div className="feedback-report__scores">
@@ -124,6 +135,133 @@ const FeedbackReport = React.memo(({ report }) => {
       )}
     </div>
   );
+
+  const renderHandTrackingSection = () => {
+    // Safely get values with proper fallbacks
+    const firstHandSpeed = handData.handMetrics && handData.handMetrics[0] && typeof handData.handMetrics[0].speed === 'number' 
+      ? Math.round(handData.handMetrics[0].speed) 
+      : 0;
+    
+    const firstHandError = handData.handMetrics && handData.handMetrics[0] && typeof handData.handMetrics[0].err === 'number' 
+      ? Math.round(handData.handMetrics[0].err) 
+      : 0;
+    
+    const handPosition = handData.feedback === 'Just right' ? 'Good' : 'Poor';
+    const handCount = handData.handMetrics ? handData.handMetrics.length : 0;
+    
+    return (
+      <div className="cv-analysis">
+        <h3 className="cv-analysis__title">
+          <i className="fas fa-hand-paper icon-sm icon-primary"></i>
+          Hand Tracking Analysis
+          {!handData.hasData && (
+            <span style={{ fontSize: '12px', color: '#e74c3c', marginLeft: '8px' }}>
+              (No data captured)
+            </span>
+          )}
+        </h3>
+        
+        <div className="cv-analysis__metrics">
+          <div className="cv-metric">
+            <div className="cv-metric__icon">
+              <i className="fas fa-hand-rock"></i>
+            </div>
+            <div className="cv-metric__content">
+              <div className="cv-metric__value">
+                {firstHandSpeed}%
+              </div>
+              <div className="cv-metric__label">Gesture Recognition</div>
+            </div>
+          </div>
+          
+          <div className="cv-metric">
+            <div className="cv-metric__icon">
+              <i className="fas fa-hand-point-up"></i>
+            </div>
+            <div className="cv-metric__content">
+              <div className="cv-metric__value">
+                {firstHandError}%
+              </div>
+              <div className="cv-metric__label">Movement Accuracy</div>
+            </div>
+          </div>
+          
+          <div className="cv-metric">
+            <div className="cv-metric__icon">
+              <i className="fas fa-hand-spock"></i>
+            </div>
+            <div className="cv-metric__content">
+              <div className="cv-metric__value">
+                {handPosition}
+              </div>
+              <div className="cv-metric__label">Hand Position</div>
+            </div>
+          </div>
+        </div>
+        
+        {handData.hasData ? (
+          <div style={{ 
+            marginTop: '16px', 
+            padding: '12px', 
+            background: '#dcfce7', 
+            border: '1px solid #16a34a', 
+            borderRadius: '8px', 
+            fontSize: '14px', 
+            color: '#15803d' 
+          }}>
+            <i className="fas fa-check-circle" style={{ marginRight: '8px' }}></i>
+            <strong>Hand tracking completed successfully!</strong>
+            <div style={{ marginTop: '4px', fontSize: '12px' }}>
+              Feedback: {handData.feedback || 'Unknown'} | Detected {handCount} hand(s)
+            </div>
+          </div>
+        ) : (
+          <div style={{ 
+            marginTop: '16px', 
+            padding: '12px', 
+            background: '#fff3cd', 
+            border: '1px solid #ffeaa7', 
+            borderRadius: '8px', 
+            fontSize: '14px', 
+            color: '#856404' 
+          }}>
+            <i className="fas fa-exclamation-triangle" style={{ marginRight: '8px' }}></i>
+            <strong>Hand tracking data was not captured.</strong>
+            <div style={{ marginTop: '8px', fontSize: '12px' }}>
+              Possible causes:
+              <br />• Hands not visible in camera frame
+              <br />• Camera permissions not granted
+              <br />• Hand tracking model failed to load
+            </div>
+          </div>
+        )}
+
+        {/* Debug info for development */}
+        {!handData.hasData && process.env.NODE_ENV === 'development' && (
+          <details style={{ 
+            marginTop: '12px', 
+            padding: '8px', 
+            background: '#f8f9fa', 
+            border: '1px solid #dee2e6', 
+            borderRadius: '6px', 
+            fontSize: '12px',
+            fontFamily: 'monospace'
+          }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
+              🔍 Hand Tracking Debug Info (Development)
+            </summary>
+            <div style={{ marginTop: '8px' }}>
+              handMetrics: {JSON.stringify(handData.handMetrics || null)}
+              <br />
+              feedback: {handData.feedback || 'undefined'}
+              <br />
+              hasData: {String(Boolean(handData.hasData))}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  };
 
   const renderVoiceAnalysisSection = () => {
     // Helper function for color coding
@@ -373,6 +511,7 @@ const FeedbackReport = React.memo(({ report }) => {
       <div className="feedback-report__content">
         {renderStarSection()}
         {renderEyeTrackingSection()}
+        {renderHandTrackingSection()}
         {renderVoiceAnalysisSection()}
         {renderTipsSection()}
         {renderTranscriptSection()}
