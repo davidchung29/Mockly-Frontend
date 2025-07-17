@@ -85,6 +85,10 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const handleHandTrackingUpdate = useCallback((metrics) => {
     setHandTrackingMetrics(metrics);
     latestHandMetricsRef.current = metrics;
+    console.log('📨 VideoAudioProcessor RECEIVED hand tracking update:', metrics);
+  setHandTrackingMetrics(metrics);
+  latestHandMetricsRef.current = metrics;
+  console.log('💾 Hand tracking metrics stored in state');
   }, []);
 
   const setupDotAnimation = useCallback(() => {
@@ -108,39 +112,64 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   }, []);
 
   const handleInterviewCompletion = useCallback(() => {
-    if (isFinished) return;
-    setIsFinished(true);
-    setIsEyeTrackingActive(false);
-    setIsVoiceAnalysisActive(false);
-    setIsHandTrackingActive(false);
+  if (isFinished) return;
+  setIsFinished(true);
+  setIsEyeTrackingActive(false);
+  setIsVoiceAnalysisActive(false);
+  setIsHandTrackingActive(false);
 
-    const finalEyeMetrics = latestEyeMetricsRef.current || eyeTrackingMetrics;
-    const finalVoiceMetrics = latestVoiceMetricsRef.current || voiceMetrics;
-    const finalHandMetrics = latestHandMetricsRef.current || handTrackingMetrics;
-    const completeTranscript = getCurrentTranscript();
+  const finalEyeMetrics = latestEyeMetricsRef.current || eyeTrackingMetrics;
+  const finalVoiceMetrics = latestVoiceMetricsRef.current || voiceMetrics;
+  const finalHandMetrics = latestHandMetricsRef.current || handTrackingMetrics;
+  const completeTranscript = getCurrentTranscript();
 
-    const finalReport = {
-      ...DEFAULT_METRICS,
-      eyeContactPercentage: finalEyeMetrics?.eyeContactPercentage || 0,
-      smilePercentage: finalEyeMetrics?.smilePercentage || 0,
-      sessionDuration: finalEyeMetrics?.sessionTime || '00:00',
-      averageVolume: finalVoiceMetrics?.averageVolume || 0,
-      volumeVariation: finalVoiceMetrics?.volumeVariation || 0,
-      pitchVariation: finalVoiceMetrics?.pitchVariation || 0,
-      speechRate: finalVoiceMetrics?.speechRate || 0,
-      clarity: finalVoiceMetrics?.clarity || 0,
-      totalSamples: finalVoiceMetrics?.totalSamples || 0,
-      eyeTracking: finalEyeMetrics || {},
-      voiceAnalysis: finalVoiceMetrics || {},
-      handTracking: finalHandMetrics || {}
-    };
+  console.log('🎯 STEP 3A - VideoAudioProcessor creating final report');
+  console.log('👁️ Final eye metrics:', finalEyeMetrics);
+  console.log('🎙️ Final voice metrics:', finalVoiceMetrics);
+  console.log('🤲 Final hand metrics:', finalHandMetrics);
 
-    if (TranscriptValidator.isValid(completeTranscript)) {
-      onFinish(finalReport, completeTranscript);
-    } else {
-      onFinish(finalReport, '');
-    }
-  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics, handTrackingMetrics]);
+  const finalReport = {
+    ...DEFAULT_METRICS,
+    // Eye tracking data (top level)
+    eyeContactPercentage: finalEyeMetrics?.eyeContactPercentage || 0,
+    smilePercentage: finalEyeMetrics?.smilePercentage || 0,
+    sessionDuration: finalEyeMetrics?.sessionTime || '00:00',
+    
+    // Voice analysis data (top level)
+    averageVolume: finalVoiceMetrics?.averageVolume || 0,
+    volumeVariation: finalVoiceMetrics?.volumeVariation || 0,
+    pitchVariation: finalVoiceMetrics?.pitchVariation || 0,
+    speechRate: finalVoiceMetrics?.speechRate || 0,
+    clarity: finalVoiceMetrics?.clarity || 0,
+    totalSamples: finalVoiceMetrics?.totalSamples || 0,
+    
+    // 🔧 FIXED: Hand tracking data (flattened to top level)
+    handMetrics: finalHandMetrics?.handMetrics || [],
+    feedback: finalHandMetrics?.feedback || 'No data',
+    handFeedback: finalHandMetrics?.feedback || 'No data',
+    
+    // Keep nested versions for compatibility
+    eyeTracking: finalEyeMetrics || {},
+    voiceAnalysis: finalVoiceMetrics || {},
+    handTracking: finalHandMetrics || {}
+  };
+
+  console.log('📊 STEP 3B - Final report created:', finalReport);
+  console.log('🔍 Report keys:', Object.keys(finalReport));
+  console.log('🤲 Hand data in report:', {
+    handMetrics: finalReport.handMetrics,
+    feedback: finalReport.feedback,
+    handFeedback: finalReport.handFeedback
+  });
+
+  if (TranscriptValidator.isValid(completeTranscript)) {
+    console.log('📝 STEP 3C - Calling onFinish with valid transcript');
+    onFinish(finalReport, completeTranscript);
+  } else {
+    console.log('📝 STEP 3C - Calling onFinish with empty transcript');
+    onFinish(finalReport, '');
+  }
+}, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics, handTrackingMetrics]);
 
   const resetAllMetrics = useCallback(() => {
     setEyeTrackingMetrics(DEFAULT_METRICS);

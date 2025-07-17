@@ -356,17 +356,27 @@ const HandTrackingAnalyzer = React.memo(({ videoRef, canvasRef, isActive, onMetr
           feedbackStableCountRef.current = 0;
           lastFeedbackRef.current = fb;
         }
+        console.log('🤲 DEBUG: Hand tracking frame data:', {
+          feedback: fb,
+          lastFeedback: lastFeedbackRef.current,
+          stableCount: feedbackStableCountRef.current,
+          handsDetected: seen,
+          hasCallback: !!onMetricsUpdate,
+          callbackType: typeof onMetricsUpdate
+        });
 
-        if (feedbackStableCountRef.current >= 5) {
-          onMetricsUpdate({
-            handMetrics: metrics.map((m, i) => ({
-              hand: i === 0 ? 'Right Hand' : 'Left Hand',
-              speed: m.speed,
-              err: m.err
-            })),
-            feedback: fb
-          });
-        }
+        if (feedbackStableCountRef.current >= 1) {
+        console.log('🚀 CALLING onMetricsUpdate with data');
+        onMetricsUpdate({
+          handMetrics: metrics.map((m, i) => ({
+            hand: i === 0 ? 'Right Hand' : 'Left Hand',
+            speed: m.speed,
+            err: m.err
+          })),
+          feedback: fb
+        });
+        console.log('✅ onMetricsUpdate call completed');
+      }
 
         rafRef.current = requestAnimationFrame(loop);
       };
