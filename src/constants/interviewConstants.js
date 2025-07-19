@@ -5,7 +5,7 @@
 
 // Interview session configuration
 export const INTERVIEW_CONFIG = {
-  sessionDuration: 10000, // 10 seconds
+  sessionDuration: 60000, // 60 seconds
   processingDelay: 200,
   fallbackTimeout: 3000,
   dotAnimationInterval: 500,
@@ -101,6 +101,9 @@ export const DEFAULT_TIPS = {
   voice: "Reduce pauses and maintain consistent pace.",
   face: "Improve eye contact and maintain confident posture."
 };
+
+
+
 
 // Predefined behavioral interview questions
 export const INTERVIEW_QUESTIONS = [
