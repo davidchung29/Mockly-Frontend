@@ -9,14 +9,20 @@
   <meta name="description" content="Mockly - AI-Powered Interview Practice Platform with Eye Contact Analysis" />
   <title>Mockly - AI Interview Practice</title>
   
-  <!-- TensorFlow.js and FaceMesh for Eye Tracking - CORRECTED URLs -->
+  <!-- TensorFlow.js and FaceMesh for Eye Tracking -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/facemesh@0.0.3/dist/facemesh.js"></script>
+  
+  <!-- ✅ CRITICAL: MediaPipe Dependencies for Hand Tracking -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6.1629159505/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
   <div id="root"></div>
   
-  <!-- Initialize TensorFlow.js backend -->
+  <!-- Initialize TensorFlow.js backend and check MediaPipe -->
   <script>
     // Configure TensorFlow.js for optimal performance
     if (typeof tf !== 'undefined') {
@@ -43,6 +49,29 @@
     } else {
       console.error('❌ TensorFlow.js not loaded');
     }
+
+    // ✅ Check MediaPipe dependencies
+    window.addEventListener('load', () => {
+      console.log('🔍 Checking MediaPipe dependencies...');
+      
+      if (typeof Hands !== 'undefined') {
+        console.log('✅ MediaPipe Hands is available');
+      } else {
+        console.error('❌ MediaPipe Hands not loaded');
+      }
+      
+      if (typeof Camera !== 'undefined') {
+        console.log('✅ MediaPipe Camera is available');
+      } else {
+        console.warn('⚠️ MediaPipe Camera not available (will use manual processing)');
+      }
+      
+      if (typeof drawConnectors !== 'undefined') {
+        console.log('✅ MediaPipe Drawing Utils available');
+      } else {
+        console.warn('⚠️ MediaPipe Drawing Utils not available');
+      }
+    });
   </script>
 </body>
 </html>

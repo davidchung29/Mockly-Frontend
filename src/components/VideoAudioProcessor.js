@@ -1,3 +1,8 @@
+/**
+ * FIXED VideoAudioProcessor - Ensures Hand Tracking Data Flows to Final Report
+ * Key Fix: Properly collect and format hand tracking data for feedback report
+ */
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SelectedQuestionDisplay from './SelectedQuestionDisplay';
 import PermissionScreen from './PermissionScreen';
@@ -46,6 +51,17 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const [isVoiceAnalysisActive, setIsVoiceAnalysisActive] = useState(false);
   const [isHandTrackingActive, setIsHandTrackingActive] = useState(false);
 
+  // ✅ CRITICAL: Store cumulative hand tracking data
+  const cumulativeHandDataRef = useRef({
+    totalHandDetections: 0,
+    maxHandsDetected: 0,
+    lastKnownHandMetrics: [],
+    lastKnownFeedback: 'Initializing',
+    hasEverDetectedHands: false,
+    sessionStartTime: Date.now(),
+    bestHandMetrics: null // Store the best hand metrics we've seen
+  });
+
   const latestEyeMetricsRef = useRef(null);
   const latestVoiceMetricsRef = useRef(null);
   const latestHandMetricsRef = useRef(null);
@@ -82,13 +98,46 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     latestVoiceMetricsRef.current = metrics;
   }, []);
 
+  // ✅ ENHANCED: Collect and store ALL hand tracking data
   const handleHandTrackingUpdate = useCallback((metrics) => {
-    setHandTrackingMetrics(metrics);
-    latestHandMetricsRef.current = metrics;
-    console.log('📨 VideoAudioProcessor RECEIVED hand tracking update:', metrics);
-  setHandTrackingMetrics(metrics);
-  latestHandMetricsRef.current = metrics;
-  console.log('💾 Hand tracking metrics stored in state');
+    console.log('📨 HAND TRACKING UPDATE RECEIVED:', metrics);
+    
+    if (metrics && typeof metrics === 'object') {
+      // Update display state
+      setHandTrackingMetrics(metrics);
+      latestHandMetricsRef.current = metrics;
+      
+      // ✅ CRITICAL: Store cumulative data for final report
+      const cumulative = cumulativeHandDataRef.current;
+      
+      if (metrics.handMetrics && metrics.handMetrics.length > 0) {
+        cumulative.totalHandDetections++;
+        cumulative.maxHandsDetected = Math.max(cumulative.maxHandsDetected, metrics.handMetrics.length);
+        cumulative.lastKnownHandMetrics = [...metrics.handMetrics]; // Deep copy
+        cumulative.hasEverDetectedHands = true;
+        
+        // Store the best metrics we've seen (highest speed/activity)
+        if (!cumulative.bestHandMetrics || 
+            (metrics.handMetrics[0]?.speed > cumulative.bestHandMetrics[0]?.speed)) {
+          cumulative.bestHandMetrics = [...metrics.handMetrics];
+        }
+        
+        console.log('✅ Hand data stored in cumulative:', {
+          totalDetections: cumulative.totalHandDetections,
+          maxHands: cumulative.maxHandsDetected,
+          currentMetrics: cumulative.lastKnownHandMetrics,
+          bestMetrics: cumulative.bestHandMetrics
+        });
+      }
+      
+      if (metrics.feedback) {
+        cumulative.lastKnownFeedback = metrics.feedback;
+      }
+      
+      if (metrics.hasEverDetectedHands) {
+        cumulative.hasEverDetectedHands = true;
+      }
+    }
   }, []);
 
   const setupDotAnimation = useCallback(() => {
@@ -111,65 +160,111 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     }
   }, []);
 
+  // ✅ FIXED: Use cumulative hand data for final report
   const handleInterviewCompletion = useCallback(() => {
-  if (isFinished) return;
-  setIsFinished(true);
-  setIsEyeTrackingActive(false);
-  setIsVoiceAnalysisActive(false);
-  setIsHandTrackingActive(false);
-
-  const finalEyeMetrics = latestEyeMetricsRef.current || eyeTrackingMetrics;
-  const finalVoiceMetrics = latestVoiceMetricsRef.current || voiceMetrics;
-  const finalHandMetrics = latestHandMetricsRef.current || handTrackingMetrics;
-  const completeTranscript = getCurrentTranscript();
-
-  console.log('🎯 STEP 3A - VideoAudioProcessor creating final report');
-  console.log('👁️ Final eye metrics:', finalEyeMetrics);
-  console.log('🎙️ Final voice metrics:', finalVoiceMetrics);
-  console.log('🤲 Final hand metrics:', finalHandMetrics);
-
-  const finalReport = {
-    ...DEFAULT_METRICS,
-    // Eye tracking data (top level)
-    eyeContactPercentage: finalEyeMetrics?.eyeContactPercentage || 0,
-    smilePercentage: finalEyeMetrics?.smilePercentage || 0,
-    sessionDuration: finalEyeMetrics?.sessionTime || '00:00',
+    if (isFinished) return;
     
-    // Voice analysis data (top level)
-    averageVolume: finalVoiceMetrics?.averageVolume || 0,
-    volumeVariation: finalVoiceMetrics?.volumeVariation || 0,
-    pitchVariation: finalVoiceMetrics?.pitchVariation || 0,
-    speechRate: finalVoiceMetrics?.speechRate || 0,
-    clarity: finalVoiceMetrics?.clarity || 0,
-    totalSamples: finalVoiceMetrics?.totalSamples || 0,
+    console.log('🎯 INTERVIEW COMPLETION STARTED');
     
-    // 🔧 FIXED: Hand tracking data (flattened to top level)
-    handMetrics: finalHandMetrics?.handMetrics || [],
-    feedback: finalHandMetrics?.feedback || 'No data',
-    handFeedback: finalHandMetrics?.feedback || 'No data',
+    setIsFinished(true);
+    setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
+    setIsHandTrackingActive(false);
+
+    // Get the latest metrics from refs
+    const finalEyeMetrics = latestEyeMetricsRef.current || eyeTrackingMetrics;
+    const finalVoiceMetrics = latestVoiceMetricsRef.current || voiceMetrics;
+    const latestHandMetrics = latestHandMetricsRef.current || handTrackingMetrics;
+    const completeTranscript = getCurrentTranscript();
+
+    // ✅ CRITICAL: Use cumulative hand data for final report
+    const cumulativeHand = cumulativeHandDataRef.current;
+    const sessionDuration = Math.round((Date.now() - cumulativeHand.sessionStartTime) / 1000);
     
-    // Keep nested versions for compatibility
-    eyeTracking: finalEyeMetrics || {},
-    voiceAnalysis: finalVoiceMetrics || {},
-    handTracking: finalHandMetrics || {}
-  };
+    // Create comprehensive hand data for final report
+    const finalHandData = {
+      handMetrics: cumulativeHand.bestHandMetrics || cumulativeHand.lastKnownHandMetrics || [],
+      feedback: cumulativeHand.lastKnownFeedback || 'No data',
+      hasEverDetectedHands: cumulativeHand.hasEverDetectedHands,
+      totalDetections: cumulativeHand.totalHandDetections,
+      maxHandsDetected: cumulativeHand.maxHandsDetected,
+      sessionDuration: sessionDuration,
+      // Also include latest real-time data
+      currentlyDetecting: latestHandMetrics?.currentlyDetecting || false,
+      totalFrames: latestHandMetrics?.totalFrames || 0
+    };
 
-  console.log('📊 STEP 3B - Final report created:', finalReport);
-  console.log('🔍 Report keys:', Object.keys(finalReport));
-  console.log('🤲 Hand data in report:', {
-    handMetrics: finalReport.handMetrics,
-    feedback: finalReport.feedback,
-    handFeedback: finalReport.handFeedback
-  });
+    console.log('📊 FINAL HAND DATA FOR REPORT:');
+    console.log('🤲 Cumulative data:', cumulativeHand);
+    console.log('🤲 Final hand data:', finalHandData);
+    console.log('🤲 Has hand metrics:', finalHandData.handMetrics.length > 0);
 
-  if (TranscriptValidator.isValid(completeTranscript)) {
-    console.log('📝 STEP 3C - Calling onFinish with valid transcript');
-    onFinish(finalReport, completeTranscript);
-  } else {
-    console.log('📝 STEP 3C - Calling onFinish with empty transcript');
-    onFinish(finalReport, '');
-  }
-}, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics, handTrackingMetrics]);
+    // ✅ ENHANCED: Create comprehensive final report
+    const finalReport = {
+      ...DEFAULT_METRICS,
+      
+      // Eye tracking data
+      eyeContactPercentage: finalEyeMetrics?.eyeContactPercentage || 0,
+      smilePercentage: finalEyeMetrics?.smilePercentage || 0,
+      sessionDuration: finalEyeMetrics?.sessionTime || finalEyeMetrics?.sessionDuration || '00:00',
+      
+      // Voice analysis data
+      averageVolume: finalVoiceMetrics?.averageVolume || 0,
+      volumeVariation: finalVoiceMetrics?.volumeVariation || 0,
+      pitchVariation: finalVoiceMetrics?.pitchVariation || 0,
+      speechRate: finalVoiceMetrics?.speechRate || 0,
+      clarity: finalVoiceMetrics?.clarity || 0,
+      totalSamples: finalVoiceMetrics?.totalSamples || 0,
+      
+      // ✅ FIXED: Use comprehensive hand data
+      handMetrics: finalHandData.handMetrics,
+      feedback: finalHandData.feedback,
+      handFeedback: finalHandData.feedback,
+      hasEverDetectedHands: finalHandData.hasEverDetectedHands,
+      handTrackingActive: true,
+      totalHandDetections: finalHandData.totalDetections,
+      maxHandsDetected: finalHandData.maxHandsDetected,
+      
+      // Keep nested versions for compatibility
+      eyeTracking: finalEyeMetrics || {},
+      voiceAnalysis: finalVoiceMetrics || {},
+      handTracking: {
+        ...finalHandData,
+        hasData: finalHandData.handMetrics && finalHandData.handMetrics.length > 0
+      }
+    };
+
+    console.log('📋 FINAL REPORT WITH HAND DATA:');
+    console.log('🔍 Report keys:', Object.keys(finalReport));
+    console.log('🤲 Hand data in final report:', {
+      topLevel_handMetrics: finalReport.handMetrics,
+      topLevel_feedback: finalReport.feedback,
+      hasEverDetectedHands: finalReport.hasEverDetectedHands,
+      totalDetections: finalReport.totalHandDetections,
+      nested_handTracking: finalReport.handTracking,
+      hasHandData: finalReport.handMetrics && finalReport.handMetrics.length > 0
+    });
+
+    // Validate hand data before sending
+    if (finalReport.handMetrics && finalReport.handMetrics.length > 0) {
+      console.log('✅ Hand tracking data successfully included in report');
+      finalReport.handMetrics.forEach((hand, index) => {
+        console.log(`🤲 Hand ${index + 1}:`, hand);
+      });
+    } else if (finalReport.hasEverDetectedHands) {
+      console.log('⚠️ Hands were detected during session but no final metrics available');
+    } else {
+      console.log('ℹ️ No hand tracking data detected during session');
+    }
+
+    if (TranscriptValidator.isValid(completeTranscript)) {
+      console.log('📝 Calling onFinish with valid transcript and hand data');
+      onFinish(finalReport, completeTranscript);
+    } else {
+      console.log('📝 Calling onFinish with empty transcript but with hand data');
+      onFinish(finalReport, '');
+    }
+  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics, handTrackingMetrics]);
 
   const resetAllMetrics = useCallback(() => {
     setEyeTrackingMetrics(DEFAULT_METRICS);
@@ -178,6 +273,18 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     latestEyeMetricsRef.current = null;
     latestVoiceMetricsRef.current = null;
     latestHandMetricsRef.current = null;
+    
+    // ✅ Reset cumulative hand data
+    cumulativeHandDataRef.current = {
+      totalHandDetections: 0,
+      maxHandsDetected: 0,
+      lastKnownHandMetrics: [],
+      lastKnownFeedback: 'Initializing',
+      hasEverDetectedHands: false,
+      sessionStartTime: Date.now(),
+      bestHandMetrics: null
+    };
+    
     if (window.eyeTrackingReset) window.eyeTrackingReset();
     if (window.pitchAnalyzerReset) window.pitchAnalyzerReset();
   }, []);
@@ -200,7 +307,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       console.log('✅ Hand tracking activated');
       setupSessionTimeout();
 
-      // 👉 Ensure canvas is overlaid on video element
+      // Ensure canvas is overlaid on video element
       if (mediaStream.videoRef?.current && handTrackingCanvasRef.current) {
         const parent = mediaStream.videoRef.current.parentNode;
         if (parent && !parent.contains(handTrackingCanvasRef.current)) {
@@ -309,13 +416,15 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
           </div>
 
           <div style={{ background: '#fff3e0', border: '2px solid #ff9800', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
-            <strong>🖐️ Hand Tracking:</strong><br />
+            <strong>🖐️ Hand Tracking (Live):</strong><br />
             {handTrackingMetrics.handMetrics.map((h, i) => (
               <div key={i}>
                 {h.hand}: Speed {h.speed.toFixed(0)}px/s | Erratic {h.err.toFixed(1)}/s
               </div>
             ))}
             <div><strong>Feedback:</strong> {handTrackingMetrics.feedback}</div>
+            <div><strong>Total Detections:</strong> {cumulativeHandDataRef.current.totalHandDetections}</div>
+            <div><strong>Ever Detected:</strong> {cumulativeHandDataRef.current.hasEverDetectedHands ? 'YES' : 'NO'}</div>
           </div>
 
           <div className="transcript-main">

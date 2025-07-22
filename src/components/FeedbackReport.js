@@ -137,131 +137,250 @@ const FeedbackReport = React.memo(({ report }) => {
   );
 
   const renderHandTrackingSection = () => {
-    // Safely get values with proper fallbacks
-    const firstHandSpeed = handData.handMetrics && handData.handMetrics[0] && typeof handData.handMetrics[0].speed === 'number' 
-      ? Math.round(handData.handMetrics[0].speed) 
-      : 0;
+  console.log('🤲 RENDERING HAND TRACKING SECTION');
+  console.log('📊 Full report object:', report);
+  console.log('🔍 Hand data extraction:', {
+    report_handMetrics: report?.handMetrics,
+    report_feedback: report?.feedback,
+    report_handTracking: report?.handTracking,
+    report_hasEverDetectedHands: report?.hasEverDetectedHands
+  });
+
+  // ✅ ENHANCED: Better hand data extraction with multiple fallbacks
+  const getEnhancedHandData = () => {
+    // Try multiple locations for hand data
+    const topLevelHandMetrics = report?.handMetrics || [];
+    const nestedHandMetrics = report?.handTracking?.handMetrics || [];
+    const topLevelFeedback = report?.feedback || report?.handFeedback;
+    const nestedFeedback = report?.handTracking?.feedback;
     
-    const firstHandError = handData.handMetrics && handData.handMetrics[0] && typeof handData.handMetrics[0].err === 'number' 
-      ? Math.round(handData.handMetrics[0].err) 
-      : 0;
+    // Use the data source that has the most information
+    const handMetrics = topLevelHandMetrics.length > 0 ? topLevelHandMetrics : nestedHandMetrics;
+    const feedback = topLevelFeedback || nestedFeedback || 'No data';
     
-    const handPosition = handData.feedback === 'Just right' ? 'Good' : 'Poor';
-    const handCount = handData.handMetrics ? handData.handMetrics.length : 0;
+    const hasData = handMetrics && handMetrics.length > 0;
+    const hasEverDetectedHands = report?.hasEverDetectedHands || report?.handTracking?.hasEverDetectedHands || false;
     
-    return (
-      <div className="cv-analysis">
-        <h3 className="cv-analysis__title">
-          <i className="fas fa-hand-paper icon-sm icon-primary"></i>
-          Hand Tracking Analysis
-          {!handData.hasData && (
-            <span style={{ fontSize: '12px', color: '#e74c3c', marginLeft: '8px' }}>
-              (No data captured)
-            </span>
-          )}
-        </h3>
-        
-        <div className="cv-analysis__metrics">
-          <div className="cv-metric">
-            <div className="cv-metric__icon">
-              <i className="fas fa-hand-rock"></i>
-            </div>
-            <div className="cv-metric__content">
-              <div className="cv-metric__value">
-                {firstHandSpeed}%
-              </div>
-              <div className="cv-metric__label">Gesture Recognition</div>
-            </div>
+    console.log('🔍 Enhanced hand data result:', {
+      handMetrics,
+      feedback,
+      hasData,
+      hasEverDetectedHands,
+      dataSource: topLevelHandMetrics.length > 0 ? 'topLevel' : 'nested'
+    });
+    
+    return {
+      handMetrics,
+      feedback,
+      hasData,
+      hasEverDetectedHands
+    };
+  };
+
+  const handData = getEnhancedHandData();
+  
+  // ✅ IMPROVED: Calculate better metrics with fallbacks
+  const getDisplayMetrics = () => {
+    if (!handData.hasData || !handData.handMetrics || handData.handMetrics.length === 0) {
+      return {
+        gestureRecognition: 0,
+        movementAccuracy: 0,
+        handPosition: 'Poor',
+        handCount: 0
+      };
+    }
+
+    const firstHand = handData.handMetrics[0];
+    
+    // Safely extract metrics with fallbacks
+    const speed = typeof firstHand?.speed === 'number' ? firstHand.speed : 0;
+    const err = typeof firstHand?.err === 'number' ? firstHand.err : 0;
+    const visibleTime = typeof firstHand?.visibleTime === 'number' ? firstHand.visibleTime : 0;
+    
+    // Convert to display metrics
+    const gestureRecognition = Math.min(100, Math.max(0, Math.round(speed / 2))); // Convert speed to 0-100 scale
+    const movementAccuracy = Math.min(100, Math.max(0, Math.round(100 - (err * 20)))); // Convert error to accuracy
+    const handPosition = handData.feedback === 'Just right' ? 'Good' : 
+                        handData.feedback === 'Too little – gesture more' ? 'Too Static' :
+                        handData.feedback === 'Too much – slow down' ? 'Too Active' : 'Variable';
+    const handCount = handData.handMetrics.length;
+    
+    return {
+      gestureRecognition,
+      movementAccuracy,
+      handPosition,
+      handCount,
+      visibleTime
+    };
+  };
+
+  const displayMetrics = getDisplayMetrics();
+  
+  return (
+    <div className="cv-analysis">
+      <h3 className="cv-analysis__title">
+        <i className="fas fa-hand-paper icon-sm icon-primary"></i>
+        Hand Tracking Analysis
+        {!handData.hasData && !handData.hasEverDetectedHands && (
+          <span style={{ fontSize: '12px', color: '#e74c3c', marginLeft: '8px' }}>
+            (No data captured)
+          </span>
+        )}
+        {!handData.hasData && handData.hasEverDetectedHands && (
+          <span style={{ fontSize: '12px', color: '#f59e0b', marginLeft: '8px' }}>
+            (Hands detected but no final data)
+          </span>
+        )}
+      </h3>
+      
+      <div className="cv-analysis__metrics">
+        <div className="cv-metric">
+          <div className="cv-metric__icon">
+            <i className="fas fa-hand-rock"></i>
           </div>
-          
-          <div className="cv-metric">
-            <div className="cv-metric__icon">
-              <i className="fas fa-hand-point-up"></i>
+          <div className="cv-metric__content">
+            <div className="cv-metric__value">
+              {displayMetrics.gestureRecognition}%
             </div>
-            <div className="cv-metric__content">
-              <div className="cv-metric__value">
-                {firstHandError}%
-              </div>
-              <div className="cv-metric__label">Movement Accuracy</div>
-            </div>
-          </div>
-          
-          <div className="cv-metric">
-            <div className="cv-metric__icon">
-              <i className="fas fa-hand-spock"></i>
-            </div>
-            <div className="cv-metric__content">
-              <div className="cv-metric__value">
-                {handPosition}
-              </div>
-              <div className="cv-metric__label">Hand Position</div>
-            </div>
+            <div className="cv-metric__label">Gesture Recognition</div>
           </div>
         </div>
         
-        {handData.hasData ? (
-          <div style={{ 
-            marginTop: '16px', 
-            padding: '12px', 
-            background: '#dcfce7', 
-            border: '1px solid #16a34a', 
-            borderRadius: '8px', 
-            fontSize: '14px', 
-            color: '#15803d' 
-          }}>
-            <i className="fas fa-check-circle" style={{ marginRight: '8px' }}></i>
-            <strong>Hand tracking completed successfully!</strong>
-            <div style={{ marginTop: '4px', fontSize: '12px' }}>
-              Feedback: {handData.feedback || 'Unknown'} | Detected {handCount} hand(s)
-            </div>
+        <div className="cv-metric">
+          <div className="cv-metric__icon">
+            <i className="fas fa-hand-point-up"></i>
           </div>
-        ) : (
-          <div style={{ 
-            marginTop: '16px', 
-            padding: '12px', 
-            background: '#fff3cd', 
-            border: '1px solid #ffeaa7', 
-            borderRadius: '8px', 
-            fontSize: '14px', 
-            color: '#856404' 
-          }}>
-            <i className="fas fa-exclamation-triangle" style={{ marginRight: '8px' }}></i>
-            <strong>Hand tracking data was not captured.</strong>
-            <div style={{ marginTop: '8px', fontSize: '12px' }}>
-              Possible causes:
-              <br />• Hands not visible in camera frame
-              <br />• Camera permissions not granted
-              <br />• Hand tracking model failed to load
+          <div className="cv-metric__content">
+            <div className="cv-metric__value">
+              {displayMetrics.movementAccuracy}%
             </div>
+            <div className="cv-metric__label">Movement Accuracy</div>
           </div>
-        )}
-
-        {/* Debug info for development */}
-        {!handData.hasData && process.env.NODE_ENV === 'development' && (
-          <details style={{ 
-            marginTop: '12px', 
-            padding: '8px', 
-            background: '#f8f9fa', 
-            border: '1px solid #dee2e6', 
-            borderRadius: '6px', 
-            fontSize: '12px',
-            fontFamily: 'monospace'
-          }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
-              🔍 Hand Tracking Debug Info (Development)
-            </summary>
-            <div style={{ marginTop: '8px' }}>
-              handMetrics: {JSON.stringify(handData.handMetrics || null)}
-              <br />
-              feedback: {handData.feedback || 'undefined'}
-              <br />
-              hasData: {String(Boolean(handData.hasData))}
+        </div>
+        
+        <div className="cv-metric">
+          <div className="cv-metric__icon">
+            <i className="fas fa-hand-spock"></i>
+          </div>
+          <div className="cv-metric__content">
+            <div className="cv-metric__value">
+              {displayMetrics.handPosition}
             </div>
-          </details>
-        )}
+            <div className="cv-metric__label">Hand Position</div>
+          </div>
+        </div>
       </div>
-    );
-  };
+      
+      {/* ✅ ENHANCED: Better status messages based on data availability */}
+      {handData.hasData ? (
+        <div style={{ 
+          marginTop: '16px', 
+          padding: '12px', 
+          background: '#dcfce7', 
+          border: '1px solid #16a34a', 
+          borderRadius: '8px', 
+          fontSize: '14px', 
+          color: '#15803d' 
+        }}>
+          <i className="fas fa-check-circle" style={{ marginRight: '8px' }}></i>
+          <strong>Hand tracking completed successfully!</strong>
+          <div style={{ marginTop: '4px', fontSize: '12px' }}>
+            Feedback: {handData.feedback} | Detected {displayMetrics.handCount} hand(s)
+            {displayMetrics.visibleTime && (
+              <span> | Tracking time: {displayMetrics.visibleTime}s</span>
+            )}
+          </div>
+          {/* Show detailed hand data */}
+          {handData.handMetrics.map((hand, index) => (
+            <div key={index} style={{ marginTop: '4px', fontSize: '11px', opacity: 0.8 }}>
+              {hand.hand}: Speed {hand.speed}px/s, Accuracy {Math.round(100 - (hand.err * 20))}%
+              {hand.totalDistance && <span>, Distance {hand.totalDistance}px</span>}
+            </div>
+          ))}
+        </div>
+      ) : handData.hasEverDetectedHands ? (
+        <div style={{ 
+          marginTop: '16px', 
+          padding: '12px', 
+          background: '#fef3c7', 
+          border: '1px solid #f59e0b', 
+          borderRadius: '8px', 
+          fontSize: '14px', 
+          color: '#92400e' 
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ marginRight: '8px' }}></i>
+          <strong>Hands were detected but no final data captured.</strong>
+          <div style={{ marginTop: '8px', fontSize: '12px' }}>
+            Possible causes:
+            <br />• Hands moved out of frame before session ended
+            <br />• Brief detection that didn't generate enough data
+            <br />• Data processing issue during session completion
+          </div>
+        </div>
+      ) : (
+        <div style={{ 
+          marginTop: '16px', 
+          padding: '12px', 
+          background: '#fff3cd', 
+          border: '1px solid #ffeaa7', 
+          borderRadius: '8px', 
+          fontSize: '14px', 
+          color: '#856404' 
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ marginRight: '8px' }}></i>
+          <strong>Hand tracking data was not captured.</strong>
+          <div style={{ marginTop: '8px', fontSize: '12px' }}>
+            Possible causes:
+            <br />• Hands not visible in camera frame
+            <br />• Camera permissions not granted
+            <br />• Hand tracking model failed to load
+            <br />• Hands moved too quickly to track accurately
+          </div>
+        </div>
+      )}
+
+      {/* ✅ ENHANCED: Debug info for development with better details */}
+      {process.env.NODE_ENV === 'development' && (
+        <details style={{ 
+          marginTop: '12px', 
+          padding: '8px', 
+          background: '#f8f9fa', 
+          border: '1px solid #dee2e6', 
+          borderRadius: '6px', 
+          fontSize: '12px',
+          fontFamily: 'monospace'
+        }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
+            🔍 Hand Tracking Debug Info (Development)
+          </summary>
+          <div style={{ marginTop: '8px' }}>
+            <strong>Data Sources:</strong>
+            <br />• report.handMetrics: {JSON.stringify(report?.handMetrics)}
+            <br />• report.feedback: {report?.feedback}
+            <br />• report.handTracking: {JSON.stringify(report?.handTracking)}
+            <br />• report.hasEverDetectedHands: {String(report?.hasEverDetectedHands)}
+            <br />
+            <br /><strong>Processed Data:</strong>
+            <br />• hasData: {String(handData.hasData)}
+            <br />• hasEverDetectedHands: {String(handData.hasEverDetectedHands)}
+            <br />• handMetrics count: {handData.handMetrics?.length || 0}
+            <br />• feedback: {handData.feedback}
+            <br />
+            <br /><strong>Display Metrics:</strong>
+            <br />• gestureRecognition: {displayMetrics.gestureRecognition}%
+            <br />• movementAccuracy: {displayMetrics.movementAccuracy}%
+            <br />• handPosition: {displayMetrics.handPosition}
+            <br />• handCount: {displayMetrics.handCount}
+            <br />
+            <br /><strong>Full Report Keys:</strong>
+            <br />{report ? Object.keys(report).join(', ') : 'No report'}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+};
+
 
   const renderVoiceAnalysisSection = () => {
     // Helper function for color coding
