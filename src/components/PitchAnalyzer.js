@@ -1,320 +1,394 @@
 /**
- * Clean Pitch Analyzer - Ultra Sensitive Without Debug Clutter
- * Production ready with proper data flow to feedback
+ * Simple Working Voice Analyzer - Back to Basics
+ * Just the version that was working + slight transition fix
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
-const PitchAnalyzer = React.memo(({ 
+const SimpleVoiceAnalyzer = React.memo(({ 
   mediaStream, 
   isActive, 
   onMetricsUpdate,
   className = '' 
 }) => {
-  const [isListening, setIsListening] = useState(false);
+  // Simple state
   const [currentVolume, setCurrentVolume] = useState(0);
-  const [averageVolume, setAverageVolume] = useState(0);
-  const [sampleCount, setSampleCount] = useState(0);
-  
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [stats, setStats] = useState({
+    avgLoudness: 0,
+    variation: 0,
+    pauseCount: 0,
+    totalTime: 0,
+    speakingPercentage: 0
+  });
+
+  // Audio refs
   const audioContextRef = useRef(null);
-  const analyserRef = useRef(null);
+  const analyzerRef = useRef(null);
   const sourceRef = useRef(null);
   const animationRef = useRef(null);
+
+  // Data tracking with proper pause detection
   const volumeHistoryRef = useRef([]);
-  
-  // Ultra sensitive volume calculation with 20x amplification
-  const getUltraSensitiveVolume = useCallback((dataArray) => {
+  const pauseThreshold = 1;
+  const pauseCountRef = useRef(0);
+  const speakingFramesRef = useRef(0);
+  const totalFramesRef = useRef(0);
+  const startTimeRef = useRef(Date.now());
+  const wasSpeakingRef = useRef(false); // Track previous speaking state for edge detection
+
+  // FIXED volume detection with stronger noise gate
+  const getVolume = useCallback((dataArray) => {
     let sum = 0;
-    let min = 255;
     let max = 0;
-    let deviationSum = 0;
-    let activeCount = 0;
+    let significantSamples = 0;
     
-    // Analyze every sample
     for (let i = 0; i < dataArray.length; i++) {
-      const sample = dataArray[i];
-      sum += sample;
-      min = Math.min(min, sample);
-      max = Math.max(max, sample);
+      const value = Math.abs(dataArray[i] - 128);
+      sum += value;
+      max = Math.max(max, value);
       
-      const deviation = Math.abs(sample - 128);
-      if (deviation > 0) {
-        deviationSum += deviation;
-        activeCount++;
+      // Count samples that are significantly above noise floor
+      if (value > 2) {
+        significantSamples++;
       }
     }
     
-    const avg = sum / dataArray.length;
-    const range = max - min;
+    const average = sum / dataArray.length;
+    const significantRatio = significantSamples / dataArray.length;
     
-    // Multiple sensitivity methods
-    const rangeVolume = (range / 255) * 100;
-    const deviationVolume = activeCount > 0 ? (deviationSum / activeCount) * 2 : 0;
-    const avgDeviationVolume = Math.abs(avg - 128) * 4;
-    
-    // Use highest detected value
-    let volume = Math.max(rangeVolume, deviationVolume, avgDeviationVolume);
-    
-    // 20x amplification for ultra sensitivity
-    volume = volume * 20;
-    
-    // Extra boost for very quiet sounds
-    if (volume > 0 && volume < 5) {
-      volume = volume * 5;
+    // Much stricter noise gate - need both conditions
+    if (average < 1 || significantRatio < 0.02) { // Less than 2% of samples above noise floor = silence
+      return 0;
     }
     
-    return Math.min(100, volume);
+    let volume = (average / 128) * 100 * 8; // 8x amplification
+    
+    // Additional hard cut for borderline volumes
+    if (volume < 3) {
+      return 0;
+    }
+    
+    return Math.min(100, Math.round(volume));
   }, []);
 
-  // Track volume history and calculate variation
-  const updateVolumeHistory = useCallback((volume) => {
+  // FIXED stats update with proper edge detection for pauses
+  const updateStats = useCallback((volume) => {
+    const now = Date.now();
+    const timeElapsed = (now - startTimeRef.current) / 1000;
+    
+    // Keep volume history
     volumeHistoryRef.current.push(volume);
-    
-    // Keep last 100 samples
     if (volumeHistoryRef.current.length > 100) {
-      volumeHistoryRef.current = volumeHistoryRef.current.slice(-100);
+      volumeHistoryRef.current.shift();
     }
     
-    // Calculate average
-    const avg = volumeHistoryRef.current.reduce((a, b) => a + b, 0) / volumeHistoryRef.current.length;
-    setAverageVolume(avg);
+    // Count frames
+    totalFramesRef.current++;
     
-    // Calculate variation
-    let totalChange = 0;
-    for (let i = 1; i < volumeHistoryRef.current.length; i++) {
-      totalChange += Math.abs(volumeHistoryRef.current[i] - volumeHistoryRef.current[i-1]);
+    // Check if currently speaking
+    const isSpeaking = volume > pauseThreshold;
+    
+    // Count speaking frames
+    if (isSpeaking) {
+      speakingFramesRef.current++;
     }
-    const variation = volumeHistoryRef.current.length > 1 
-      ? totalChange / (volumeHistoryRef.current.length - 1) 
+    
+    // FIXED: Edge detection for pauses (falling edge = speaking to silence)
+    if (wasSpeakingRef.current && !isSpeaking) {
+      // Just transitioned from speaking to silence - count this as a pause
+      pauseCountRef.current++;
+    }
+    
+    // Update previous state for next frame
+    wasSpeakingRef.current = isSpeaking;
+    
+    // Calculate stats
+    const avgLoudness = volumeHistoryRef.current.length > 0 
+      ? Math.round(volumeHistoryRef.current.reduce((a, b) => a + b, 0) / volumeHistoryRef.current.length)
       : 0;
     
-    return { avg, variation };
-  }, []);
-
-  // Main analysis loop
-  const analyze = useCallback(() => {
-    if (!analyserRef.current || !isActive) {
-      return;
-    }
-
-    try {
-      const analyser = analyserRef.current;
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      
-      analyser.getByteTimeDomainData(dataArray);
-      
-      const volume = getUltraSensitiveVolume(dataArray);
-      const { avg, variation } = updateVolumeHistory(volume);
-      
-      setCurrentVolume(volume);
-      setSampleCount(prev => prev + 1);
-      
-      // Send metrics to parent every 10 samples
-      if (sampleCount % 10 === 0) {
-        const metrics = {
-          volume: Math.round(volume),
-          averageVolume: Math.round(avg),
-          volumeVariation: Math.round(Math.min(100, variation * 2)),
-          pitchVariation: 60 + Math.round(variation * 0.5),
-          speechRate: avg > 3 ? 75 : 45,
-          clarity: avg > 5 ? 85 : 60,
-          totalSamples: sampleCount
-        };
-        
-        if (onMetricsUpdate) {
-          onMetricsUpdate(metrics);
-        }
+    // Variation
+    let variation = 0;
+    if (volumeHistoryRef.current.length > 1) {
+      let totalChange = 0;
+      for (let i = 1; i < volumeHistoryRef.current.length; i++) {
+        totalChange += Math.abs(volumeHistoryRef.current[i] - volumeHistoryRef.current[i-1]);
       }
-      
-    } catch (error) {
-      console.error('Voice analysis error:', error);
+      variation = Math.round(totalChange / (volumeHistoryRef.current.length - 1));
     }
-
-    if (isActive) {
-      animationRef.current = requestAnimationFrame(analyze);
-    }
-  }, [isActive, getUltraSensitiveVolume, updateVolumeHistory, sampleCount, onMetricsUpdate]);
-
-  // Initialize ultra-sensitive audio
-  const initializeAudio = useCallback(async () => {
-    try {
-      if (!mediaStream) return;
-      
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: 48000
+    
+    // Speaking percentage
+    const speakingPercentage = totalFramesRef.current > 0 
+      ? Math.round((speakingFramesRef.current / totalFramesRef.current) * 100)
+      : 0;
+    
+    const newStats = {
+      avgLoudness,
+      variation,
+      pauseCount: pauseCountRef.current,
+      totalTime: Math.round(timeElapsed),
+      speakingPercentage
+    };
+    
+    setStats(newStats);
+    
+    // Send to parent
+    if (onMetricsUpdate) {
+      onMetricsUpdate({
+        averageVolume: avgLoudness,
+        volumeVariation: variation,
+        pitchVariation: variation,
+        speechRate: speakingPercentage,
+        clarity: avgLoudness > 5 ? 85 : 60,
+        totalSamples: volumeHistoryRef.current.length,
+        pauseCount: pauseCountRef.current
       });
+    }
+  }, [onMetricsUpdate]);
+
+  // Main processing loop
+  const processAudio = useCallback(() => {
+    if (!analyzerRef.current || !isActive) return;
+    
+    const dataArray = new Uint8Array(analyzerRef.current.frequencyBinCount);
+    analyzerRef.current.getByteTimeDomainData(dataArray);
+    
+    const volume = getVolume(dataArray);
+    setCurrentVolume(volume);
+    updateStats(volume);
+    
+    if (isActive) {
+      animationRef.current = requestAnimationFrame(processAudio);
+    }
+  }, [isActive, getVolume, updateStats]);
+
+  // SIMPLE audio setup - back to working version
+  const setupAudio = useCallback(async () => {
+    try {
+      console.log('🎤 Setting up simple voice analysis...');
       
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-      
+      if (!mediaStream) return;
+
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       audioContextRef.current = audioContext;
-      
+
       const source = audioContext.createMediaStreamSource(mediaStream);
       sourceRef.current = source;
-      
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0;
-      analyser.minDecibels = -100;
-      analyser.maxDecibels = -10;
-      analyserRef.current = analyser;
-      
-      source.connect(analyser);
-      
-      setIsListening(true);
-      analyze();
-      
+
+      const analyzer = audioContext.createAnalyser();
+      analyzer.fftSize = 512; // Back to 512
+      analyzer.smoothingTimeConstant = 0.3; // Back to 0.3
+      analyzerRef.current = analyzer;
+
+      source.connect(analyzer);
+
+      console.log('✅ Audio setup complete');
+      setIsDetecting(true);
+      processAudio();
+
     } catch (error) {
-      console.error('Audio initialization error:', error);
-      setIsListening(false);
+      console.error('❌ Audio setup failed:', error);
+      setIsDetecting(false);
     }
-  }, [mediaStream, analyze]);
+  }, [mediaStream, processAudio]);
 
   // Cleanup
-  const cleanup = useCallback(() => {
+  const cleanupAudio = useCallback(() => {
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
     
     if (sourceRef.current) {
-      try {
-        sourceRef.current.disconnect();
-      } catch (e) {}
+      sourceRef.current.disconnect();
       sourceRef.current = null;
     }
     
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+    if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
     
-    setIsListening(false);
+    setIsDetecting(false);
     setCurrentVolume(0);
-    setAverageVolume(0);
-    setSampleCount(0);
-    volumeHistoryRef.current = [];
   }, []);
 
-  // Reset function for new sessions
-  const resetMetrics = useCallback(() => {
-    console.log('🔄 Voice analyzer reset');
-    setCurrentVolume(0);
-    setAverageVolume(0);
-    setSampleCount(0);
+  // Reset with new state
+  const resetAnalyzer = useCallback(() => {
     volumeHistoryRef.current = [];
+    pauseCountRef.current = 0;
+    speakingFramesRef.current = 0;
+    totalFramesRef.current = 0;
+    wasSpeakingRef.current = false; // Reset speaking state
+    startTimeRef.current = Date.now();
+    
+    setStats({
+      avgLoudness: 0,
+      variation: 0,
+      pauseCount: 0,
+      totalTime: 0,
+      speakingPercentage: 0
+    });
+    setCurrentVolume(0);
   }, []);
 
-  // Start/stop based on props
+  // Effects
   useEffect(() => {
     if (isActive && mediaStream) {
-      initializeAudio();
+      setupAudio();
     } else {
-      cleanup();
+      cleanupAudio();
     }
-    return cleanup;
-  }, [isActive, mediaStream, initializeAudio, cleanup]);
+    return cleanupAudio;
+  }, [isActive, mediaStream, setupAudio, cleanupAudio]);
 
-  // Expose reset function
   useEffect(() => {
-    window.pitchAnalyzerReset = resetMetrics;
-    return () => {
-      delete window.pitchAnalyzerReset;
-    };
-  }, [resetMetrics]);
+    window.voiceAnalyzerReset = resetAnalyzer;
+    return () => delete window.voiceAnalyzerReset;
+  }, [resetAnalyzer]);
 
   if (!isActive) return null;
 
   return (
-    <div className={`pitch-analyzer ${className}`}>
-      <div className="pitch-analyzer__header">
-        <h4 className="pitch-analyzer__title">
-          <i className="fas fa-waveform-lines icon-sm"></i>
+    <div className={`simple-voice-analyzer ${className}`}>
+      <div className="voice-header">
+        <h4 className="voice-title">
+          <i className="fas fa-microphone"></i>
           Voice Analysis
         </h4>
-        <div className="pitch-analyzer__status" style={{ 
-          color: isListening ? '#10b981' : '#ef4444',
-          fontWeight: 'bold'
+        <div className="voice-status" style={{
+          color: isDetecting ? '#10b981' : '#ef4444',
+          fontWeight: 'bold',
+          fontSize: '12px',
+          padding: '4px 8px',
+          background: isDetecting ? '#dcfce7' : '#fef2f2',
+          borderRadius: '4px'
         }}>
-          {isListening ? 'Active' : 'Inactive'}
-        </div>
-      </div>
-      
-      <div className="pitch-analyzer__metrics">
-        <div className="pitch-analyzer__metric">
-          <span 
-            className="pitch-analyzer__value"
-            style={{ color: averageVolume > 5 ? '#10b981' : averageVolume > 0 ? '#f59e0b' : '#ef4444' }}
-          >
-            {Math.round(averageVolume)}%
-          </span>
-          <span className="pitch-analyzer__label">Volume</span>
-        </div>
-        
-        <div className="pitch-analyzer__metric">
-          <span 
-            className="pitch-analyzer__value"
-            style={{ color: volumeHistoryRef.current.length > 1 ? 
-              Math.round(volumeHistoryRef.current.slice(-10).reduce((sum, v, i, arr) => 
-                i === 0 ? 0 : sum + Math.abs(v - arr[i-1]), 0) / 9 * 3) > 10 ? '#10b981' : '#f59e0b' : '#ef4444' }}
-          >
-            {volumeHistoryRef.current.length > 1 ? 
-              Math.round(volumeHistoryRef.current.slice(-10).reduce((sum, v, i, arr) => 
-                i === 0 ? 0 : sum + Math.abs(v - arr[i-1]), 0) / 9 * 3) : 0}%
-          </span>
-          <span className="pitch-analyzer__label">Variation</span>
-        </div>
-        
-        <div className="pitch-analyzer__metric">
-          <span className="pitch-analyzer__value">
-            {volumeHistoryRef.current.length > 1 ? 
-              Math.round(volumeHistoryRef.current.slice(-10).reduce((sum, v, i, arr) => 
-                i === 0 ? 0 : sum + Math.abs(v - arr[i-1]), 0) / 9 * 3) : 0}%
-          </span>
-          <span className="pitch-analyzer__label">Variation</span>
-        </div>
-        
-        <div className="pitch-analyzer__metric">
-          <span className="pitch-analyzer__value">
-            {averageVolume > 3 ? 75 : 45}%
-          </span>
-          <span className="pitch-analyzer__label">Speech Rate</span>
-        </div>
-        
-        <div className="pitch-analyzer__metric">
-          <span className="pitch-analyzer__value">
-            {averageVolume > 5 ? 85 : 60}%
-          </span>
-          <span className="pitch-analyzer__label">Clarity</span>
-        </div>
-        
-        <div className="pitch-analyzer__metric">
-          <span className="pitch-analyzer__value">
-            {sampleCount}
-          </span>
-          <span className="pitch-analyzer__label">Samples</span>
+          {isDetecting ? 'LISTENING' : 'INACTIVE'}
         </div>
       </div>
 
-      {/* Simple status indicator */}
+      {/* Volume bar - SIMPLE with just slight smoothing */}
       <div style={{
-        marginTop: '12px',
+        margin: '12px 0',
         padding: '8px',
-        background: averageVolume > 3 ? '#dcfce7' : '#fef2f2',
-        border: `1px solid ${averageVolume > 3 ? '#16a34a' : '#dc2626'}`,
+        background: '#f8fafc',
         borderRadius: '6px',
-        textAlign: 'center',
-        fontSize: '12px'
+        border: '1px solid #e2e8f0'
       }}>
-        <strong>
-          {averageVolume > 3 ? '✅ Voice Detected' : '⚠️ Speak louder for better detection'}
-        </strong>
+        <div style={{ fontSize: '12px', marginBottom: '4px', color: '#64748b' }}>
+          Live Volume: {currentVolume}% | Average: {stats.avgLoudness}%
+        </div>
+        <div style={{
+          width: '100%',
+          height: '8px',
+          background: '#e2e8f0',
+          borderRadius: '4px',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            width: `${Math.min(100, currentVolume)}%`,
+            height: '100%',
+            background: currentVolume > pauseThreshold ? '#10b981' : '#ef4444',
+            transition: 'width 0.008s linear' // Much faster and linear for more responsive feel
+          }} />
+        </div>
+      </div>
+
+      {/* Stats - SIMPLE */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '8px',
+        marginBottom: '12px'
+      }}>
+        <div style={{
+          padding: '8px',
+          background: '#f8fafc',
+          borderRadius: '6px',
+          textAlign: 'center',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', color: stats.avgLoudness > 5 ? '#10b981' : '#ef4444' }}>
+            {stats.avgLoudness}%
+          </div>
+          <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
+            Avg Loudness
+          </div>
+        </div>
+
+        <div style={{
+          padding: '8px',
+          background: '#f8fafc',
+          borderRadius: '6px',
+          textAlign: 'center',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', color: stats.variation > 5 ? '#10b981' : '#f59e0b' }}>
+            {stats.variation}%
+          </div>
+          <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
+            Variation
+          </div>
+        </div>
+
+        <div style={{
+          padding: '8px',
+          background: '#f8fafc',
+          borderRadius: '6px',
+          textAlign: 'center',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#3b82f6' }}>
+            {stats.pauseCount}
+          </div>
+          <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
+            Pauses
+          </div>
+        </div>
+
+        <div style={{
+          padding: '8px',
+          background: '#f8fafc',
+          borderRadius: '6px',
+          textAlign: 'center',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#8b5cf6' }}>
+            {stats.speakingPercentage}%
+          </div>
+          <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
+            Speaking
+          </div>
+        </div>
+      </div>
+
+      {/* Status */}
+      <div style={{
+        padding: '8px',
+        background: stats.avgLoudness > 3 ? '#dcfce7' : '#fef2f2',
+        border: `1px solid ${stats.avgLoudness > 3 ? '#16a34a' : '#dc2626'}`,
+        borderRadius: '6px',
+        fontSize: '12px',
+        textAlign: 'center'
+      }}>
+        {stats.avgLoudness > 3 ? (
+          <span style={{ color: '#15803d' }}>
+            <strong>✅ Voice detected!</strong>
+            <br />Speaking {stats.speakingPercentage}% of the time
+          </span>
+        ) : (
+          <span style={{ color: '#dc2626' }}>
+            <strong>💬 Just speak normally</strong>
+            <br />Current: {currentVolume}%
+          </span>
+        )}
       </div>
     </div>
   );
 });
 
-PitchAnalyzer.displayName = 'PitchAnalyzer';
+SimpleVoiceAnalyzer.displayName = 'SimpleVoiceAnalyzer';
 
-export default PitchAnalyzer;
+export default SimpleVoiceAnalyzer;
