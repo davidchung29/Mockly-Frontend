@@ -1,6 +1,6 @@
 /**
- * Fixed Hand Tracking Analyzer - Proper MediaPipe Integration
- * Key fixes: Correct MediaPipe setup, proper event handling, and reliable data flow
+ * COMPLETELY FIXED Hand Tracking Analyzer - React + MediaPipe Integration
+ * Fixed all callback and initialization issues
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
@@ -15,7 +15,6 @@ const HandTrackingAnalyzer = React.memo(({
 }) => {
   const handsRef = useRef();
   const animationFrameRef = useRef();
-  const cameraRef = useRef();
   const metricsRef = useRef({
     handVisibleTime: [0, 0],
     totalDistance: [0, 0],
@@ -37,8 +36,10 @@ const HandTrackingAnalyzer = React.memo(({
 
   const [modelLoaded, setModelLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
 
-  // Hand landmark indices (MediaPipe Hands provides 21 landmarks per hand)
+  // Hand landmark indices
   const HAND_LANDMARKS = {
     WRIST: 0,
     THUMB_TIP: 4,
@@ -54,82 +55,71 @@ const HandTrackingAnalyzer = React.memo(({
   const TOO_LITTLE = m => m.speed < 130;
   const TOO_MUCH = m => m.speed > 150;
 
-  // ✅ CRITICAL FIX: Proper MediaPipe Hands initialization
-  const loadModel = useCallback(async () => {
-    try {
-      // Check if MediaPipe is available
-      if (!window.Hands) {
-        throw new Error('MediaPipe Hands not loaded. Please ensure MediaPipe scripts are included.');
-      }
-      
-      // Check if Camera is available (may not be needed for manual processing)
-      if (!window.Camera) {
-        console.warn('MediaPipe Camera not available, using manual processing');
-      }
-      
-      DevHelpers.log('🤲 Initializing MediaPipe Hands...');
-
-      // Create Hands instance with proper configuration
-      const hands = new window.Hands({
-        locateFile: (file) => {
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }
-      });
-
-      // Configure hand detection settings
-      hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 0, // Use fastest model for real-time
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.5
-      });
-
-      // ✅ CRITICAL: Set up results callback BEFORE starting detection
-      hands.onResults((results) => {
-        handleHandResults(results);
-      });
-
-      handsRef.current = hands;
-
-      // ✅ ALTERNATIVE: Use manual frame processing instead of Camera API
-      if (window.Camera && videoRef?.current) {
-        console.log('🎥 MediaPipe Camera API available, setting up camera...');
-        // Use Camera API if available - but with better error handling
-        try {
-          const camera = new window.Camera(videoRef.current, {
-            onFrame: async () => {
-              if (handsRef.current && isActive && videoRef.current) {
-                const video = videoRef.current;
-                if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-                  await handsRef.current.send({ image: video });
-                }
-              }
-            },
-            width: 640,
-            height: 480
-          });
-          cameraRef.current = camera;
-          console.log('✅ MediaPipe Camera initialized successfully');
-        } catch (cameraError) {
-          console.warn('⚠️ Camera API failed, will use manual processing:', cameraError);
-          cameraRef.current = null;
-        }
-      } else {
-        console.log('📹 Using manual frame processing (Camera API not available)');
-      }
-      
-      setModelLoaded(true);
-      DevHelpers.log('✅ MediaPipe Hands model loaded successfully');
-
-    } catch (err) {
-      DevHelpers.error('❌ Failed to load MediaPipe Hands model:', err);
-      setError(`Failed to load hand tracking model: ${err.message}`);
+  // ✅ FIXED: Proper canvas setup
+  const setupCanvas = useCallback(() => {
+    const canvas = canvasRef?.current;
+    const video = videoRef?.current;
+    
+    if (!canvas || !video) {
+      console.log('❌ Canvas or video not available for hand tracking setup');
+      return false;
     }
-  }, [videoRef, isActive]);
 
-  // ✅ FIXED: Proper results handler
+    if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+      console.log('⏳ Video not ready for canvas setup, waiting...', {
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight
+      });
+      return false;
+    }
+
+    const rect = video.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '999';
+    canvas.style.background = 'transparent';
+
+    console.log('✅ Hand tracking canvas setup complete:', {
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight
+    });
+
+    setCanvasReady(true);
+    return true;
+  }, [canvasRef, videoRef]);
+
+  // ✅ FIXED: Results handler with proper binding
   const handleHandResults = useCallback((results) => {
-    if (!results || !isActive) return;
+    console.log('🔥 handleHandResults called!', {
+      hasResults: !!results,
+      hasMultiHandLandmarks: !!(results?.multiHandLandmarks),
+      landmarkCount: results?.multiHandLandmarks?.length || 0,
+      isActive,
+      canvasReady
+    });
+
+    if (!results || !isActive || !canvasReady) {
+      console.log('❌ Skipping results - missing requirements:', {
+        hasResults: !!results,
+        isActive,
+        canvasReady
+      });
+      return;
+    }
+
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      console.log('🤲 MediaPipe detected hands:', results.multiHandLandmarks.length);
+    }
 
     try {
       drawLandmarks(results);
@@ -142,45 +132,58 @@ const HandTrackingAnalyzer = React.memo(({
     } catch (error) {
       console.error('Error handling hand results:', error);
     }
-  }, [isActive]);
+  }, [isActive, canvasReady]);
 
-  // Draw landmarks on canvas
+  // ✅ ENHANCED: Draw landmarks with debugging
   const drawLandmarks = useCallback((results) => {
     const canvas = canvasRef?.current;
-    if (!canvas) return;
+    const video = videoRef?.current;
+    
+    if (!canvas || !video || !canvasReady) {
+      console.log('❌ Cannot draw landmarks - missing elements:', {
+        hasCanvas: !!canvas,
+        hasVideo: !!video,
+        canvasReady
+      });
+      return;
+    }
     
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    const video = videoRef?.current;
-    if (!video) return;
-    
     const scaleX = canvas.width / video.videoWidth;
     const scaleY = canvas.height / video.videoHeight;
     
-    // Save context for mirrored drawing
     ctx.save();
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
     
-    if (results.multiHandLandmarks) {
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      console.log('🎨 Drawing hand landmarks:', {
+        handsCount: results.multiHandLandmarks.length,
+        canvasSize: `${canvas.width}x${canvas.height}`,
+        videoSize: `${video.videoWidth}x${video.videoHeight}`,
+        scale: `${scaleX.toFixed(2)}x${scaleY.toFixed(2)}`
+      });
+      
       results.multiHandLandmarks.forEach((landmarks, handIndex) => {
         const color = handIndex === 0 ? '#00ff00' : '#ff8c00';
         
-        // Draw hand landmarks
         ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        
         landmarks.forEach((landmark, i) => {
           const x = landmark.x * video.videoWidth * scaleX;
           const y = landmark.y * video.videoHeight * scaleY;
           
+          // Draw normal-sized landmark points
           ctx.beginPath();
           ctx.arc(x, y, 3, 0, 2 * Math.PI);
           ctx.fill();
           
-          // Draw key connections
+          // Draw connections from wrist to fingertips
           if (i === HAND_LANDMARKS.WRIST) {
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
             [HAND_LANDMARKS.THUMB_TIP, HAND_LANDMARKS.INDEX_FINGER_TIP, 
              HAND_LANDMARKS.MIDDLE_FINGER_TIP, HAND_LANDMARKS.RING_FINGER_TIP, 
              HAND_LANDMARKS.PINKY_TIP].forEach(tipIndex => {
@@ -195,10 +198,12 @@ const HandTrackingAnalyzer = React.memo(({
           }
         });
       });
+      
+      console.log('✅ Landmarks drawn successfully');
     }
     
     ctx.restore();
-  }, [canvasRef, videoRef]);
+  }, [canvasRef, videoRef, canvasReady]);
 
   // Analyze hand movement
   const analyzeHandMovement = useCallback((results, deltaTime) => {
@@ -219,22 +224,18 @@ const HandTrackingAnalyzer = React.memo(({
         const video = videoRef?.current;
         if (!canvas || !video) return;
         
-        // Get hand center from key landmarks
         const wrist = landmarks[HAND_LANDMARKS.WRIST];
         const indexTip = landmarks[HAND_LANDMARKS.INDEX_FINGER_TIP];
         const middleTip = landmarks[HAND_LANDMARKS.MIDDLE_FINGER_TIP];
         
         if (!wrist || !indexTip || !middleTip) return;
         
-        // Calculate hand center
         const centerX = (wrist.x + indexTip.x + middleTip.x) / 3;
         const centerY = (wrist.y + indexTip.y + middleTip.y) / 3;
         
-        // Convert to canvas coordinates
         const x = centerX * video.videoWidth * (canvas.width / video.videoWidth);
         const y = centerY * video.videoHeight * (canvas.height / video.videoHeight);
         
-        // Calculate movement metrics
         if (current.lastPositions[handIndex]) {
           const dx = x - current.lastPositions[handIndex].x;
           const dy = y - current.lastPositions[handIndex].y;
@@ -257,7 +258,6 @@ const HandTrackingAnalyzer = React.memo(({
         }
         current.lastPositions[handIndex] = { x, y };
         
-        // Calculate speed and error rate
         const visibleTime = current.handVisibleTime[handIndex] / 1000;
         const speed = visibleTime > 0 ? current.totalDistance[handIndex] / visibleTime : 0;
         const err = visibleTime > 0 ? current.erraticCount[handIndex] / visibleTime : 0;
@@ -272,7 +272,6 @@ const HandTrackingAnalyzer = React.memo(({
       });
     }
     
-    // Generate feedback
     let feedback = 'No hands detected';
     if (current.hasEverDetectedHands && !hasActiveHands) {
       feedback = 'Hands were detected but not currently visible';
@@ -286,7 +285,6 @@ const HandTrackingAnalyzer = React.memo(({
       }
     }
     
-    // Update metrics
     const newMetrics = {
       handMetrics: handMetrics.filter(Boolean),
       feedback,
@@ -298,147 +296,179 @@ const HandTrackingAnalyzer = React.memo(({
     
     setMetrics(newMetrics);
     
-    // ✅ CRITICAL: Send metrics to parent
     if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
-      console.log('🤲 Sending hand metrics update:', newMetrics);
       onMetricsUpdate(newMetrics);
     }
     
   }, [canvasRef, videoRef, onMetricsUpdate]);
 
-  // ✅ FIXED: Manual detection loop with proper video validation
+  // ✅ FIXED: MediaPipe initialization with proper callback binding
+  const loadModel = useCallback(async () => {
+    try {
+      if (!window.Hands) {
+        throw new Error('MediaPipe Hands not loaded. Please ensure MediaPipe scripts are included.');
+      }
+      
+      console.log('🤲 Initializing MediaPipe Hands...');
+
+      const hands = new window.Hands({
+        locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }
+      });
+
+      hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 0,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.5
+      });
+
+      // ✅ CRITICAL FIX: Bind the callback properly
+      hands.onResults(handleHandResults);
+      
+      handsRef.current = hands;
+      setModelLoaded(true);
+      console.log('✅ MediaPipe Hands model loaded successfully');
+
+    } catch (err) {
+      console.error('❌ Failed to load MediaPipe Hands model:', err);
+      setError(`Failed to load hand tracking model: ${err.message}`);
+    }
+  }, [handleHandResults]); // ✅ Add handleHandResults as dependency
+
+  // ✅ FIXED: Detection loop
   const detectHands = useCallback(async () => {
-    if (!handsRef.current || !isActive || !videoRef?.current) {
+    if (!handsRef.current || !isActive || !videoRef?.current || !canvasReady || !modelLoaded) {
       return;
     }
     
     try {
       const video = videoRef.current;
       
-      // ✅ CRITICAL: Ensure video is fully ready and has dimensions
       if (video.readyState >= 2 && 
           video.videoWidth > 0 && 
           video.videoHeight > 0 && 
           !video.paused && 
           !video.ended) {
         
-        // Process hands manually if Camera API not available
-        if (!cameraRef.current) {
-          // Create canvas to convert video frame to ImageData
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          // Send ImageData to MediaPipe
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          await handsRef.current.send({ image: imageData });
-        }
+        console.log('📸 Sending frame to MediaPipe...');
+        await handsRef.current.send({ image: video });
       }
     } catch (err) {
-      DevHelpers.error('Error in hand detection:', err);
+      console.error('Error in hand detection:', err);
     }
     
-    if (isActive && !cameraRef.current) {
+    if (isActive && modelLoaded) {
       animationFrameRef.current = requestAnimationFrame(detectHands);
     }
-  }, [isActive, videoRef]);
+  }, [isActive, videoRef, canvasReady, modelLoaded]);
 
-  // ✅ FIXED: Start camera OR manual detection when active
-  const startCamera = useCallback(async () => {
+  // ✅ ENHANCED: Start detection
+  const startDetection = useCallback(async () => {
     if (!videoRef?.current) {
       console.error('❌ Video element not available for hand tracking');
       return;
     }
 
-    const video = videoRef.current;
-    
-    // Wait for video to be ready
-    const waitForVideo = () => {
+    console.log('🤲 Starting hand tracking detection...');
+    setIsDetecting(true);
+
+    const waitForVideoAndSetupCanvas = () => {
       return new Promise((resolve) => {
-        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-          resolve();
-        } else {
-          const checkVideo = () => {
-            if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        const checkVideoAndCanvas = () => {
+          const video = videoRef.current;
+          if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+            if (setupCanvas()) {
               resolve();
             } else {
-              setTimeout(checkVideo, 100);
+              setTimeout(checkVideoAndCanvas, 100);
             }
-          };
-          checkVideo();
-        }
+          } else {
+            setTimeout(checkVideoAndCanvas, 100);
+          }
+        };
+        checkVideoAndCanvas();
       });
     };
 
     try {
-      await waitForVideo();
-      console.log('✅ Video ready for hand tracking:', {
-        width: video.videoWidth,
-        height: video.videoHeight,
-        readyState: video.readyState
-      });
-
-      if (cameraRef.current && isActive) {
-        await cameraRef.current.start();
-        console.log('✅ Hand tracking camera started');
-      } else if (isActive && handsRef.current) {
-        // Fallback to manual detection
-        console.log('✅ Starting manual hand detection');
+      await waitForVideoAndSetupCanvas();
+      console.log('✅ Video and canvas ready for hand tracking');
+      
+      if (isActive && handsRef.current) {
         detectHands();
       }
     } catch (error) {
       console.error('❌ Failed to start hand tracking:', error);
     }
-  }, [isActive, detectHands, videoRef]);
+  }, [isActive, detectHands, setupCanvas, videoRef]);
 
-  // ✅ FIXED: Stop camera OR manual detection when inactive
-  const stopCamera = useCallback(() => {
-    if (cameraRef.current) {
-      try {
-        cameraRef.current.stop();
-        console.log('⏹️ Hand tracking camera stopped');
-      } catch (error) {
-        console.error('❌ Failed to stop hand tracking camera:', error);
-      }
-    }
-    
-    // Stop manual detection
+  // Stop detection
+  const stopDetection = useCallback(() => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
-      console.log('⏹️ Manual hand detection stopped');
+      console.log('⏹️ Hand detection stopped');
     }
+    setCanvasReady(false);
+    setIsDetecting(false);
   }, []);
 
-  // Start/stop detection based on isActive prop
+  // ✅ Setup canvas when video becomes available
+  useEffect(() => {
+    const video = videoRef?.current;
+    if (!video || !isActive) return;
+
+    const handleVideoLoad = () => {
+      console.log('📹 Video loaded, setting up hand tracking canvas...');
+      setTimeout(() => {
+        setupCanvas();
+      }, 100);
+    };
+
+    video.addEventListener('loadedmetadata', handleVideoLoad);
+    video.addEventListener('canplay', handleVideoLoad);
+    video.addEventListener('playing', handleVideoLoad);
+    
+    if (video.readyState >= 2) {
+      handleVideoLoad();
+    }
+
+    return () => {
+      video.removeEventListener('loadedmetadata', handleVideoLoad);
+      video.removeEventListener('canplay', handleVideoLoad);
+      video.removeEventListener('playing', handleVideoLoad);
+    };
+  }, [videoRef, isActive, setupCanvas]);
+
+  // ✅ Start/stop detection
   useEffect(() => {
     if (isActive && modelLoaded) {
-      startCamera();
+      startDetection();
     } else {
-      stopCamera();
+      stopDetection();
     }
-  }, [isActive, modelLoaded, startCamera, stopCamera]);
+  }, [isActive, modelLoaded, startDetection, stopDetection]);
 
-  // Load model on mount
+  // ✅ Load model on mount
   useEffect(() => {
     if (videoRef?.current) {
       loadModel();
     }
   }, [videoRef, loadModel]);
 
-  // Cleanup on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
-      stopCamera();
+      stopDetection();
       if (handsRef.current) {
         handsRef.current.close();
       }
     };
-  }, [stopCamera]);
+  }, [stopDetection]);
 
-  // Reset metrics function
+  // Reset function
   const resetMetrics = useCallback(() => {
     console.log('🔄 HandTrackingAnalyzer resetMetrics called');
     metricsRef.current = {
@@ -463,13 +493,13 @@ const HandTrackingAnalyzer = React.memo(({
     };
     
     setMetrics(resetData);
+    setCanvasReady(false);
     
     if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
       onMetricsUpdate(resetData);
     }
   }, [onMetricsUpdate]);
 
-  // Get status colors for display
   const getStatusColor = (status) => {
     switch (status) {
       case 'Just right': return '#00ff00';
@@ -501,7 +531,10 @@ const HandTrackingAnalyzer = React.memo(({
             Hand Tracking Analysis
           </h4>
           <div className="hand-tracking-status-text">
-            Status: {modelLoaded ? 'Active' : 'Loading...'}
+            Status: {modelLoaded && canvasReady && isActive && isDetecting ? 'Active' : 
+                    modelLoaded && canvasReady && isActive ? 'Ready' :
+                    modelLoaded && canvasReady ? 'Waiting for activation' :
+                    modelLoaded ? 'Setting up canvas...' : 'Loading...'}
             {metrics.hasEverDetectedHands && (
               <span style={{ color: '#00ff00', marginLeft: '8px' }}>
                 ✓ Hands Detected
@@ -551,6 +584,23 @@ const HandTrackingAnalyzer = React.memo(({
               <span className="hand-tracking-stat-label">Session Time</span>
             </div>
           )}
+        </div>
+
+        {/* ✅ DEBUG: Show detection status */}
+        <div style={{
+          marginTop: '12px',
+          padding: '8px',
+          background: isDetecting ? '#dcfce7' : '#fef2f2',
+          border: `1px solid ${isDetecting ? '#16a34a' : '#dc2626'}`,
+          borderRadius: '6px',
+          fontSize: '12px',
+          textAlign: 'center'
+        }}>
+          <strong>
+            Detection Status: {isDetecting ? '🟢 RUNNING' : '🔴 STOPPED'}
+          </strong>
+          <br />
+          Model: {modelLoaded ? '✅' : '❌'} | Canvas: {canvasReady ? '✅' : '❌'} | Active: {isActive ? '✅' : '❌'}
         </div>
       </div>
     </div>

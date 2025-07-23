@@ -1,6 +1,6 @@
 /**
- * Video Card Component
- * Displays video feed with user video in Interviewer View and landmark overlay
+ * FIXED Video Card Component
+ * Properly handles preset MediaStream from loading screen
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -11,10 +11,11 @@ const VideoCard = React.memo(({
   isAudioOnly, 
   isExpanded, 
   onToggle, 
-  videoRef,
-  mediaStream,
-  eyeTrackingCanvasRef,
-  handTrackingCanvasRef
+  videoRef, 
+  mediaStream, 
+  presetMediaStream,
+  eyeTrackingCanvasRef, 
+  handTrackingCanvasRef 
 }) => {
   const interviewerVideoRef = useRef();
 
@@ -25,22 +26,48 @@ const VideoCard = React.memo(({
       isExpanded,
       videoRef: videoRef?.current,
       videoRefExists: !!videoRef?.current,
-      mediaStream: !!mediaStream
+      mediaStream: !!mediaStream,
+      presetMediaStream: !!presetMediaStream
     });
-  }, [hasVideo, isAudioOnly, isExpanded, videoRef, mediaStream]);
+  }, [hasVideo, isAudioOnly, isExpanded, videoRef, mediaStream, presetMediaStream]);
 
+  // ✅ ENHANCED: Properly setup video elements with preset or regular stream
   useEffect(() => {
-    if (mediaStream && hasVideo) {
+    const streamToUse = presetMediaStream || mediaStream;
+    
+    if (streamToUse && hasVideo) {
+      console.log('🎥 Setting up video elements with stream:', {
+        isPreset: !!presetMediaStream,
+        hasVideoTracks: streamToUse.getVideoTracks().length > 0,
+        streamId: streamToUse.id
+      });
+
+      // Setup main video element
       if (videoRef?.current) {
         const videoElement = videoRef.current;
         try {
-          videoElement.srcObject = mediaStream;
+          console.log('🎥 Setting up main video element...');
+          videoElement.srcObject = streamToUse;
           videoElement.muted = true;
           videoElement.autoplay = true;
           videoElement.playsInline = true;
+          
           videoElement.onloadedmetadata = () => {
-            DevHelpers.log('Main video metadata loaded');
+            console.log('✅ Main video metadata loaded:', {
+              videoWidth: videoElement.videoWidth,
+              videoHeight: videoElement.videoHeight,
+              readyState: videoElement.readyState
+            });
           };
+          
+          videoElement.oncanplay = () => {
+            console.log('✅ Main video can play');
+          };
+          
+          videoElement.onplaying = () => {
+            console.log('✅ Main video is playing');
+          };
+          
           videoElement.play().catch(error => {
             DevHelpers.error('Error starting main video playback:', error);
           });
@@ -49,16 +76,32 @@ const VideoCard = React.memo(({
         }
       }
 
+      // Setup interviewer video element
       if (interviewerVideoRef?.current) {
         const interviewerVideoElement = interviewerVideoRef.current;
         try {
-          interviewerVideoElement.srcObject = mediaStream;
+          console.log('🎥 Setting up interviewer video element...');
+          interviewerVideoElement.srcObject = streamToUse;
           interviewerVideoElement.muted = true;
           interviewerVideoElement.autoplay = true;
           interviewerVideoElement.playsInline = true;
+          
           interviewerVideoElement.onloadedmetadata = () => {
-            DevHelpers.log('Interviewer video metadata loaded');
+            console.log('✅ Interviewer video metadata loaded:', {
+              videoWidth: interviewerVideoElement.videoWidth,
+              videoHeight: interviewerVideoElement.videoHeight,
+              readyState: interviewerVideoElement.readyState
+            });
           };
+          
+          interviewerVideoElement.oncanplay = () => {
+            console.log('✅ Interviewer video can play');
+          };
+          
+          interviewerVideoElement.onplaying = () => {
+            console.log('✅ Interviewer video is playing');
+          };
+          
           interviewerVideoElement.play().catch(error => {
             DevHelpers.error('Error starting interviewer video playback:', error);
           });
@@ -67,64 +110,84 @@ const VideoCard = React.memo(({
         }
       }
     }
-  }, [mediaStream, videoRef, hasVideo]);
+  }, [presetMediaStream, mediaStream, videoRef, hasVideo]);
 
+  // ✅ ENHANCED: Canvas setup for eye tracking
   useEffect(() => {
     if (eyeTrackingCanvasRef?.current && interviewerVideoRef?.current) {
       const canvas = eyeTrackingCanvasRef.current;
       const video = interviewerVideoRef.current;
 
       const updateCanvasSize = () => {
-        canvas.width = video.offsetWidth;
-        canvas.height = video.offsetHeight;
-        DevHelpers.log('Eye canvas sized to match interviewer video:', {
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height
-        });
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          canvas.width = video.offsetWidth;
+          canvas.height = video.offsetHeight;
+          console.log('✅ Eye canvas sized to match interviewer video:', {
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight
+          });
+        }
       };
 
       const resizeObserver = new ResizeObserver(updateCanvasSize);
       resizeObserver.observe(video);
 
-      if (video.readyState >= 1) {
+      video.addEventListener('loadedmetadata', updateCanvasSize);
+      video.addEventListener('canplay', updateCanvasSize);
+      video.addEventListener('playing', updateCanvasSize);
+
+      // Update immediately if video is ready
+      if (video.readyState >= 2) {
         updateCanvasSize();
-      } else {
-        video.addEventListener('loadedmetadata', updateCanvasSize);
       }
 
       return () => {
         resizeObserver.disconnect();
         video.removeEventListener('loadedmetadata', updateCanvasSize);
+        video.removeEventListener('canplay', updateCanvasSize);
+        video.removeEventListener('playing', updateCanvasSize);
       };
     }
   }, [eyeTrackingCanvasRef, hasVideo]);
 
+  // ✅ ENHANCED: Canvas setup for hand tracking
   useEffect(() => {
     if (handTrackingCanvasRef?.current && interviewerVideoRef?.current) {
       const canvas = handTrackingCanvasRef.current;
       const video = interviewerVideoRef.current;
 
       const updateCanvasSize = () => {
-        canvas.width = video.offsetWidth;
-        canvas.height = video.offsetHeight;
-        DevHelpers.log('Hand canvas sized to match interviewer video:', {
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height
-        });
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          canvas.width = video.offsetWidth;
+          canvas.height = video.offsetHeight;
+          console.log('✅ Hand canvas sized to match interviewer video:', {
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight
+          });
+        }
       };
 
       const resizeObserver = new ResizeObserver(updateCanvasSize);
       resizeObserver.observe(video);
 
-      if (video.readyState >= 1) {
+      video.addEventListener('loadedmetadata', updateCanvasSize);
+      video.addEventListener('canplay', updateCanvasSize);
+      video.addEventListener('playing', updateCanvasSize);
+
+      // Update immediately if video is ready
+      if (video.readyState >= 2) {
         updateCanvasSize();
-      } else {
-        video.addEventListener('loadedmetadata', updateCanvasSize);
       }
 
       return () => {
         resizeObserver.disconnect();
         video.removeEventListener('loadedmetadata', updateCanvasSize);
+        video.removeEventListener('canplay', updateCanvasSize);
+        video.removeEventListener('playing', updateCanvasSize);
       };
     }
   }, [handTrackingCanvasRef, hasVideo]);
@@ -136,6 +199,11 @@ const VideoCard = React.memo(({
           <div className="video-card__video-label">
             <i className="fas fa-video icon-sm"></i>
             Your Video
+            {presetMediaStream && (
+              <small style={{ marginLeft: '8px', color: '#10b981' }}>
+                (Using preset stream)
+              </small>
+            )}
           </div>
           <div className="video-card__video-box">
             <video 
@@ -197,6 +265,11 @@ const VideoCard = React.memo(({
             <i className="fas fa-user icon-sm"></i>
             Interviewer View
             <small style={{ marginLeft: '8px', opacity: 0.7 }}>with Eye + Hand Tracking</small>
+            {presetMediaStream && (
+              <small style={{ marginLeft: '8px', color: '#10b981' }}>
+                (Preset)
+              </small>
+            )}
           </div>
           <div className="video-card__video-box video-card__interviewer-view" style={{ position: 'relative' }}>
             <video 
@@ -231,9 +304,8 @@ const VideoCard = React.memo(({
                 width: '100%',
                 height: '100%',
                 pointerEvents: 'none',
-                zIndex: 9999, // ensure highest stacking
-                border: '3px dashed red', // 👁️ clearly visible outline
-                backgroundColor: 'transparent' // prevent covering video
+                zIndex: 11,
+                backgroundColor: 'transparent'
               }}
             />
           </div>
@@ -286,6 +358,11 @@ const VideoCard = React.memo(({
         <h3 className="video-card__title">
           <i className="fas fa-video icon-sm"></i>
           Video Feed
+          {presetMediaStream && (
+            <span style={{ fontSize: '12px', color: '#10b981', marginLeft: '8px' }}>
+              [Preset Stream]
+            </span>
+          )}
         </h3>
         <button 
           className="video-card__toggle"

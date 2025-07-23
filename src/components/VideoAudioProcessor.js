@@ -1,9 +1,10 @@
 /**
- * FIXED VideoAudioProcessor - Ensures Hand Tracking Data Flows to Final Report
- * Key Fix: Properly collect and format hand tracking data for feedback report
+ * FIXED VideoAudioProcessor - Proper Initialization Order for Hand Tracking
+ * Key Fix: Ensure video element is ready before activating hand tracking
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+
 import SelectedQuestionDisplay from './SelectedQuestionDisplay';
 import PermissionScreen from './PermissionScreen';
 import VideoCard from './VideoCard';
@@ -19,7 +20,7 @@ import { ResourceCleanup } from '../utils/resourceCleanup';
 import { DEFAULT_METRICS, TranscriptValidator } from '../utils/interviewUtils';
 import { INTERVIEW_CONFIG, UI_TEXT, ERROR_MESSAGES } from '../constants/interviewConstants';
 
-const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) => {
+const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, presetMediaStream }) => {
   const [listeningDots, setListeningDots] = useState('');
   const [isVideoCardExpanded, setIsVideoCardExpanded] = useState(true);
   const [isFinished, setIsFinished] = useState(false);
@@ -51,6 +52,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const [isVoiceAnalysisActive, setIsVoiceAnalysisActive] = useState(false);
   const [isHandTrackingActive, setIsHandTrackingActive] = useState(false);
 
+  // ✅ NEW: Track video readiness for hand tracking
+  const [isVideoReady, setIsVideoReady] = useState(false);
+
   // ✅ CRITICAL: Store cumulative hand tracking data
   const cumulativeHandDataRef = useRef({
     totalHandDetections: 0,
@@ -59,7 +63,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     lastKnownFeedback: 'Initializing',
     hasEverDetectedHands: false,
     sessionStartTime: Date.now(),
-    bestHandMetrics: null // Store the best hand metrics we've seen
+    bestHandMetrics: null
   });
 
   const latestEyeMetricsRef = useRef(null);
@@ -72,7 +76,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const eyeTrackingCanvasRef = useRef();
   const handTrackingCanvasRef = useRef();
 
-  const mediaStream = useMediaStream();
+  const mediaStream = useMediaStream(presetMediaStream);
   const speechRecognition = useSpeechRecognition();
   const transcriptSimulation = useTranscriptSimulation();
 
@@ -87,6 +91,63 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       ? transcriptSimulation.simulatedTranscript
       : speechRecognition.transcript;
   }, [transcriptSimulation.simulatedTranscript, speechRecognition.transcript]);
+
+  // ✅ NEW: Check video readiness
+  const checkVideoReadiness = useCallback(() => {
+    const video = mediaStream.videoRef?.current;
+    if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+      console.log('✅ Video is ready for hand tracking:', {
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        hasVideo: mediaStream.hasVideo
+      });
+      setIsVideoReady(true);
+      return true;
+    }
+    console.log('⏳ Video not ready yet for hand tracking:', {
+      hasVideo: !!video,
+      readyState: video?.readyState,
+      videoWidth: video?.videoWidth,
+      videoHeight: video?.videoHeight
+    });
+    return false;
+  }, [mediaStream.videoRef, mediaStream.hasVideo]);
+
+  // ✅ NEW: Monitor video element for readiness
+  useEffect(() => {
+    const video = mediaStream.videoRef?.current;
+    if (!video) return;
+
+    const handleVideoReady = () => {
+      console.log('📹 Video metadata loaded, checking readiness...');
+      setTimeout(() => {
+        checkVideoReadiness();
+      }, 100); // Small delay to ensure video is fully rendered
+    };
+
+    const handleVideoPlay = () => {
+      console.log('📹 Video started playing, checking readiness...');
+      setTimeout(() => {
+        checkVideoReadiness();
+      }, 200);
+    };
+
+    video.addEventListener('loadedmetadata', handleVideoReady);
+    video.addEventListener('canplay', handleVideoReady);
+    video.addEventListener('playing', handleVideoPlay);
+
+    // Check immediately if already ready
+    if (video.readyState >= 2) {
+      handleVideoReady();
+    }
+
+    return () => {
+      video.removeEventListener('loadedmetadata', handleVideoReady);
+      video.removeEventListener('canplay', handleVideoReady);
+      video.removeEventListener('playing', handleVideoPlay);
+    };
+  }, [mediaStream.videoRef?.current, checkVideoReadiness]);
 
   const handleEyeTrackingUpdate = useCallback((metrics) => {
     setEyeTrackingMetrics(metrics);
@@ -113,10 +174,10 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       if (metrics.handMetrics && metrics.handMetrics.length > 0) {
         cumulative.totalHandDetections++;
         cumulative.maxHandsDetected = Math.max(cumulative.maxHandsDetected, metrics.handMetrics.length);
-        cumulative.lastKnownHandMetrics = [...metrics.handMetrics]; // Deep copy
+        cumulative.lastKnownHandMetrics = [...metrics.handMetrics];
         cumulative.hasEverDetectedHands = true;
         
-        // Store the best metrics we've seen (highest speed/activity)
+        // Store the best metrics we've seen
         if (!cumulative.bestHandMetrics || 
             (metrics.handMetrics[0]?.speed > cumulative.bestHandMetrics[0]?.speed)) {
           cumulative.bestHandMetrics = [...metrics.handMetrics];
@@ -189,15 +250,11 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       totalDetections: cumulativeHand.totalHandDetections,
       maxHandsDetected: cumulativeHand.maxHandsDetected,
       sessionDuration: sessionDuration,
-      // Also include latest real-time data
       currentlyDetecting: latestHandMetrics?.currentlyDetecting || false,
       totalFrames: latestHandMetrics?.totalFrames || 0
     };
 
-    console.log('📊 FINAL HAND DATA FOR REPORT:');
-    console.log('🤲 Cumulative data:', cumulativeHand);
-    console.log('🤲 Final hand data:', finalHandData);
-    console.log('🤲 Has hand metrics:', finalHandData.handMetrics.length > 0);
+    console.log('📊 FINAL HAND DATA FOR REPORT:', finalHandData);
 
     // ✅ ENHANCED: Create comprehensive final report
     const finalReport = {
@@ -234,28 +291,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       }
     };
 
-    console.log('📋 FINAL REPORT WITH HAND DATA:');
-    console.log('🔍 Report keys:', Object.keys(finalReport));
-    console.log('🤲 Hand data in final report:', {
-      topLevel_handMetrics: finalReport.handMetrics,
-      topLevel_feedback: finalReport.feedback,
-      hasEverDetectedHands: finalReport.hasEverDetectedHands,
-      totalDetections: finalReport.totalHandDetections,
-      nested_handTracking: finalReport.handTracking,
-      hasHandData: finalReport.handMetrics && finalReport.handMetrics.length > 0
-    });
-
-    // Validate hand data before sending
-    if (finalReport.handMetrics && finalReport.handMetrics.length > 0) {
-      console.log('✅ Hand tracking data successfully included in report');
-      finalReport.handMetrics.forEach((hand, index) => {
-        console.log(`🤲 Hand ${index + 1}:`, hand);
-      });
-    } else if (finalReport.hasEverDetectedHands) {
-      console.log('⚠️ Hands were detected during session but no final metrics available');
-    } else {
-      console.log('ℹ️ No hand tracking data detected during session');
-    }
+    console.log('📋 FINAL REPORT WITH HAND DATA:', finalReport);
 
     if (TranscriptValidator.isValid(completeTranscript)) {
       console.log('📝 Calling onFinish with valid transcript and hand data');
@@ -301,24 +337,35 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       } else {
         speechRecognition.startListening();
       }
+      
+      // ✅ Start eye tracking and voice analysis immediately
       setIsEyeTrackingActive(true);
       setIsVoiceAnalysisActive(true);
-      setIsHandTrackingActive(true);
-      console.log('✅ Hand tracking activated');
-      setupSessionTimeout();
-
-      // Ensure canvas is overlaid on video element
-      if (mediaStream.videoRef?.current && handTrackingCanvasRef.current) {
-        const parent = mediaStream.videoRef.current.parentNode;
-        if (parent && !parent.contains(handTrackingCanvasRef.current)) {
-          parent.appendChild(handTrackingCanvasRef.current);
-        }
+      
+      // ✅ FIXED: Wait for video to be ready before starting hand tracking
+      console.log('🤲 Checking video readiness for hand tracking...');
+      if (checkVideoReadiness()) {
+        console.log('✅ Video ready, starting hand tracking immediately');
+        setIsHandTrackingActive(true);
+      } else {
+        console.log('⏳ Video not ready, will start hand tracking when ready');
+        // Hand tracking will be activated by the video readiness effect
       }
+      
+      setupSessionTimeout();
     } catch (error) {
       console.error('❌ Initialization failed:', error);
       setIsInitialized(false);
     }
-  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout, resetAllMetrics]);
+  }, [isInitialized, mediaStream, speechRecognition, transcriptSimulation, setupDotAnimation, setupSessionTimeout, resetAllMetrics, checkVideoReadiness]);
+
+  // ✅ NEW: Start hand tracking when video becomes ready
+  useEffect(() => {
+    if (isVideoReady && isInitialized && !isHandTrackingActive && !isFinished) {
+      console.log('✅ Video is ready, activating hand tracking now');
+      setIsHandTrackingActive(true);
+    }
+  }, [isVideoReady, isInitialized, isHandTrackingActive, isFinished]);
 
   useEffect(() => {
     scrollToBottom();
@@ -371,6 +418,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
             onToggle={() => setIsVideoCardExpanded(prev => !prev)}
             videoRef={mediaStream.videoRef}
             mediaStream={mediaStream.mediaStream}
+            presetMediaStream={presetMediaStream}
             eyeTrackingCanvasRef={eyeTrackingCanvasRef}
             handTrackingCanvasRef={handTrackingCanvasRef}
           />
@@ -403,12 +451,16 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
             onMetricsUpdate={handleHandTrackingUpdate}
           />
 
+          {/* ✅ ENHANCED DEBUG with video readiness info */}
           <div style={{ background: '#e8f5e8', border: '2px solid #4ade80', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '14px' }}>
             <strong>🔍 SIMPLE DEBUG:</strong>
             <br />
             Voice Average: {voiceMetrics.averageVolume}% | Variation: {voiceMetrics.volumeVariation}% | Samples: {voiceMetrics.totalSamples}
             <br />
             Eye Contact: {eyeTrackingMetrics.eyeContactPercentage}% | Smile: {eyeTrackingMetrics.smilePercentage}%
+            <br />
+            <strong>📹 Video Ready: {isVideoReady ? '✅ YES' : '❌ NO'}</strong> | 
+            Hand Tracking: {isHandTrackingActive ? '✅ ACTIVE' : '❌ INACTIVE'}
             <br />
             <strong style={{ color: voiceMetrics.averageVolume > 5 ? 'green' : 'red' }}>
               Voice Status: {voiceMetrics.averageVolume > 5 ? '✅ DETECTED' : '❌ NOT DETECTED'}
