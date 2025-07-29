@@ -1,48 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#3BA676" />
   <meta name="description" content="Mockly - AI-Powered Interview Practice Platform with Eye Contact Analysis" />
   <title>Mockly - AI Interview Practice</title>
-  
-  <!-- TensorFlow.js and FaceMesh for Eye Tracking - CORRECTED URLs -->
+
+  <!-- Fonts and Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+  <!-- TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/facemesh@0.0.3/dist/facemesh.js"></script>
+
+  <!-- MediaPipe Core Utilities -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.3/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6.10/control_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1/drawing_utils.js"></script>
+
+  <!-- Load MediaPipe FaceMesh & Hands v0.10.7 into window -->
+  <script type="module">
+    import { FaceMesh } from 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.10.7/face_mesh.js';
+    import { Hands } from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.10.7/hands.js';
+    window.FaceMesh = FaceMesh;
+    window.Hands = Hands;
+    console.log('✅ MediaPipe FaceMesh & Hands v0.10.7 exposed to window');
+  </script>
 </head>
 <body>
   <div id="root"></div>
-  
-  <!-- Initialize TensorFlow.js backend -->
+
+  <!-- Initialization Logs and Debug -->
   <script>
-    // Configure TensorFlow.js for optimal performance
-    if (typeof tf !== 'undefined') {
+    window.addEventListener('load', function() {
+      console.log('🚀 Initializing tracking systems...');
+
       tf.ready().then(() => {
-        console.log('✅ TensorFlow.js backend initialized:', tf.getBackend());
-        console.log('✅ TensorFlow.js version:', tf.version.tfjs);
-        
-        // Check if FaceMesh is available
+        console.log('✅ TensorFlow.js ready:', tf.version.tfjs, '| Backend:', tf.getBackend());
+
         if (typeof facemesh !== 'undefined') {
-          console.log('✅ FaceMesh model is available');
-        } else {
-          console.warn('⚠️ FaceMesh model not loaded');
+          console.log('✅ TensorFlow.js FaceMesh available for setup');
+          window.facemesh = facemesh;
         }
-        
-        // Prefer WebGL for better performance, fallback to CPU
+
         if (tf.getBackend() !== 'webgl') {
           tf.setBackend('webgl').catch(() => {
-            console.warn('⚠️ WebGL backend not available, using CPU backend');
+            console.warn('⚠️ WebGL not available, using CPU');
           });
         }
-      }).catch(err => {
-        console.error('❌ TensorFlow.js initialization failed:', err);
       });
-    } else {
-      console.error('❌ TensorFlow.js not loaded');
-    }
+
+      const logReady = () => {
+        console.log('='.repeat(70));
+        console.log('🎯 FINAL STATUS CHECK');
+        console.log('   📄 Setup page (TensorFlow.js):', typeof window.facemesh !== 'undefined' ? '✅ READY' : '❌ FAILED');
+        console.log('   👁️ Eye tracking (MediaPipe FaceMesh):', typeof window.FaceMesh !== 'undefined' ? '✅ READY' : '❌ FAILED');
+        console.log('   🤲 Hand tracking (MediaPipe Hands):', typeof window.Hands !== 'undefined' ? '✅ READY' : '❌ FAILED');
+        console.log('='.repeat(70));
+      };
+
+      setTimeout(logReady, 2000); // give time for module script to load
+    });
+
+    // Log MediaPipe file fetches
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      const url = args[0];
+      if (typeof url === 'string' && url.includes('mediapipe')) {
+        console.log('🌐 MediaPipe file requested:', url);
+      }
+      return originalFetch.apply(this, args);
+    };
   </script>
 </body>
 </html>
