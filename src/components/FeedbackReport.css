@@ -1,0 +1,19 @@
+.feedback-report{
+    overflow-y: auto;
+    max-height: calc(100vh - 200px);
+}
+
+.feedback-report::-webkit-scrollbar {
+  width: 10px;
+  height:5px;
+}
+
+.feedback-report::-webkit-scrollbar-thumb {
+  background-color: #3BA676;
+  border-radius: 8px;
+}
+
+.feedback-report::-webkit-scrollbar-track {
+  background-color: #f0f0f0;
+  border-radius: 8px;
+}
