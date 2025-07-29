@@ -214,21 +214,21 @@ const EyeTrackingAnalyzer = React.memo(({
     };
     
     // Enhanced logging for debugging
-    if (current.totalFrames % 30 === 0) { // Log every 30 frames
-      console.log('👁️ EyeTrackingAnalyzer metrics update:', {
-        newMetrics,
-        currentState: current,
-        hasCallback: !!onMetricsUpdate,
-        callbackType: typeof onMetricsUpdate
-      });
-    }
+    // if (current.totalFrames % 30 === 0) { // Log every 30 frames
+    //   console.log('👁️ EyeTrackingAnalyzer metrics update:', {
+    //     newMetrics,
+    //     currentState: current,
+    //     hasCallback: !!onMetricsUpdate,
+    //     callbackType: typeof onMetricsUpdate
+    //   });
+    // }
     
     // Update local state for display
     setMetrics(newMetrics);
     
     // ✅ CRITICAL FIX: Always notify parent component of metrics update
     if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
-      console.log('✅ Calling onMetricsUpdate with:', newMetrics);
+      // console.log('✅ Calling onMetricsUpdate with:', newMetrics);
       onMetricsUpdate(newMetrics);
     } else {
       console.warn('❌ onMetricsUpdate callback is missing or not a function:', {
@@ -282,7 +282,7 @@ const EyeTrackingAnalyzer = React.memo(({
   // Start/stop detection based on isActive prop
   useEffect(() => {
     if (isActive && modelLoaded) {
-      DevHelpers.log('🎯 Starting eye tracking detection...');
+      // DevHelpers.log('🎯 Starting eye tracking detection...');
       detectFaces();
     } else {
       if (animationFrameRef.current) {
