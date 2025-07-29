@@ -1,6 +1,6 @@
 /**
- * Media Stream Hook
- * Handles video/audio capture and permissions
+ * MERGED Media Stream Hook
+ * Keeps main's flow but adds support for setup page flow
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -152,4 +152,4 @@ export const useMediaStream = () => {
     retryCapture,
     resetState
   };
-}; 
+};

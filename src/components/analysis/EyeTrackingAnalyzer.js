@@ -1,14 +1,11 @@
 /**
  * Eye Tracking Analyzer Component
  * Integrates facial recognition and eye contact analysis into Mockly
- * FIXED VERSION - Ensures state updates are properly passed to parent
- * 
- * NOTE: Visual overlays are disabled - computer vision analysis still active
- * All landmark detection and analysis continues to work, but no visual feedback
+ * MERGED VERSION - Background processing only, no visual overlays
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { DevHelpers } from '../config/devConfig';
+import { DevHelpers } from '../../config/devConfig';
 
 const EyeTrackingAnalyzer = React.memo(({ 
   videoRef, 
@@ -57,12 +54,6 @@ const EyeTrackingAnalyzer = React.memo(({
       setError('Failed to load facial recognition model');
     }
   }, []);
-
-  // Draw landmarks on external canvas (DISABLED - no visual overlay)
-  const drawLandmarks = useCallback((landmarks) => {
-    // Visual overlay disabled - computer vision analysis still active
-    // Canvas drawing removed to hide visual overlays
-  }, [videoRef, leftEyeIndices, rightEyeIndices, mouthIndices, lipCornerIndices]);
 
   // Analyze smile from facial landmarks
   const analyzeSmile = useCallback((landmarks) => {
@@ -128,7 +119,7 @@ const EyeTrackingAnalyzer = React.memo(({
     }
   }, [videoRef]);
 
-  // FIXED: Update metrics and notify parent component
+  // Update metrics and notify parent component
   const updateMetrics = useCallback((eyeContactResult, isSmiling) => {
     const current = metricsRef.current;
     
@@ -159,22 +150,11 @@ const EyeTrackingAnalyzer = React.memo(({
       smileFrames: current.smileFrames
     };
     
-    // Enhanced logging for debugging
-    // if (current.totalFrames % 30 === 0) { // Log every 30 frames
-    //   console.log('👁️ EyeTrackingAnalyzer metrics update:', {
-    //     newMetrics,
-    //     currentState: current,
-    //     hasCallback: !!onMetricsUpdate,
-    //     callbackType: typeof onMetricsUpdate
-    //   });
-    // }
-    
     // Update local state for display
     setMetrics(newMetrics);
     
-    // ✅ CRITICAL FIX: Always notify parent component of metrics update
+    // Always notify parent component of metrics update
     if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
-      // console.log('✅ Calling onMetricsUpdate with:', newMetrics);
       onMetricsUpdate(newMetrics);
     } else {
       console.warn('❌ onMetricsUpdate callback is missing or not a function:', {
@@ -198,7 +178,6 @@ const EyeTrackingAnalyzer = React.memo(({
         
         if (predictions.length > 0) {
           const landmarks = predictions[0].scaledMesh;
-          drawLandmarks(landmarks);
           
           const eyeContactResult = analyzeEyeContact(landmarks);
           const isSmiling = analyzeSmile(landmarks);
@@ -206,13 +185,6 @@ const EyeTrackingAnalyzer = React.memo(({
           updateMetrics(eyeContactResult, isSmiling);
         } else {
           // No face detected
-          // Canvas clearing disabled - no visual overlays
-          // const canvas = canvasRef?.current;
-          // if (canvas) {
-          //   const ctx = canvas.getContext('2d');
-          //   ctx.clearRect(0, 0, canvas.width, canvas.height);
-          // }
-          
           updateMetrics({ isLooking: false, gazeStatus: 'No face detected' }, false);
         }
       }
@@ -224,12 +196,11 @@ const EyeTrackingAnalyzer = React.memo(({
     if (isActive) {
       animationFrameRef.current = requestAnimationFrame(detectFaces);
     }
-  }, [isActive, videoRef, drawLandmarks, analyzeEyeContact, analyzeSmile, updateMetrics]);
+  }, [isActive, videoRef, analyzeEyeContact, analyzeSmile, updateMetrics]);
 
   // Start/stop detection based on isActive prop
   useEffect(() => {
     if (isActive && modelLoaded) {
-      // DevHelpers.log('🎯 Starting eye tracking detection...');
       detectFaces();
     } else {
       if (animationFrameRef.current) {
@@ -266,7 +237,7 @@ const EyeTrackingAnalyzer = React.memo(({
       sessionTime: '00:00'
     });
     
-    // ✅ Also notify parent of reset
+    // Also notify parent of reset
     if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
       onMetricsUpdate({
         eyeContactPercentage: 0,
@@ -279,16 +250,6 @@ const EyeTrackingAnalyzer = React.memo(({
       });
     }
   }, [onMetricsUpdate]);
-
-  // DEBUG: Log when component receives new props
-  useEffect(() => {
-    console.log('👁️ EyeTrackingAnalyzer props changed:', {
-      isActive,
-      hasVideoRef: !!videoRef?.current,
-      hasCallback: !!onMetricsUpdate,
-      callbackType: typeof onMetricsUpdate
-    });
-  }, [isActive, videoRef, onMetricsUpdate]);
 
   const getStatusColor = (status) => {
     switch (status) {

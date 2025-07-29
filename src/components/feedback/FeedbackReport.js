@@ -1,6 +1,6 @@
 /**
- * Clean Feedback Report - Production Ready
- * Displays voice analysis data cleanly without excessive debug
+ * MERGED Feedback Report - Main's base with enhanced hand tracking display
+ * Uses main's structure but includes proper hand data extraction and display
  */
 
 import React, { useEffect, useState } from 'react';
@@ -36,12 +36,26 @@ const FeedbackReport = React.memo(({ report }) => {
     };
   };
 
-  // Extract hand tracking data
+  // Enhanced hand tracking data extraction with multiple fallbacks
   const getHandData = () => {
+    // Try multiple locations for hand data
+    const topLevelHandMetrics = report?.handMetrics || [];
+    const nestedHandMetrics = report?.handTracking?.handMetrics || [];
+    const topLevelFeedback = report?.feedback || report?.handFeedback;
+    const nestedFeedback = report?.handTracking?.feedback;
+    
+    // Use the data source that has the most information
+    const handMetrics = topLevelHandMetrics.length > 0 ? topLevelHandMetrics : nestedHandMetrics;
+    const feedback = topLevelFeedback || nestedFeedback || 'No data';
+    
+    const hasData = handMetrics && handMetrics.length > 0;
+    const hasEverDetectedHands = report?.hasEverDetectedHands || report?.handTracking?.hasEverDetectedHands || false;
+    
     return {
-      handMetrics: report?.handMetrics || [],
-      feedback: report?.feedback || 'No data',
-      hasData: report?.handMetrics && report.handMetrics.length > 0
+      handMetrics,
+      feedback,
+      hasData,
+      hasEverDetectedHands
     };
   };
 
@@ -67,7 +81,6 @@ const FeedbackReport = React.memo(({ report }) => {
       </div>
     );
   };
-
 
   const MetricCard = ({ icon, label, value, color = '#374151' }) => (
     <div className="metric-card">
@@ -99,10 +112,10 @@ const FeedbackReport = React.memo(({ report }) => {
     </div>
   );
 
-    // Shared section wrapper for uniform styling
+  // Shared section wrapper for uniform styling
   const SectionWrapper = ({ title, iconClass, children, className }) => (
-    <section className={`feedback-section ${className || ''}`.trim()} style = {{marginTop: '24px'}}>
-      <h3 className="feedback-section__title" style={{ paddingBottom: '0px'}}>
+    <section className={`feedback-section ${className || ''}`.trim()} style={{ marginTop: '24px' }}>
+      <h3 className="feedback-section__title" style={{ paddingBottom: '0px' }}>
         <i className={`${iconClass} icon-sm icon-primary`}></i>
         {title}
       </h3>
@@ -112,7 +125,6 @@ const FeedbackReport = React.memo(({ report }) => {
     </section>
   );
 
-  
   const DummyBar = ({ label, value }) => {
     const [width, setWidth] = React.useState(0);
 
@@ -179,31 +191,11 @@ const FeedbackReport = React.memo(({ report }) => {
     );
   };
 
-
-  const renderScoreSection = () => (
-    <div className="feedback-report__scores">
-      <div className={`score score--${ScoreEvaluator.getScoreVariant(report.content_score)}`}>
-        <i className="fas fa-file-text icon-sm icon-primary"></i>
-        Content Score: {report.content_score}
-      </div>
-      <div className={`score score--${ScoreEvaluator.getScoreVariant(report.voice_score)}`}>
-        <i className="fas fa-microphone icon-sm icon-primary"></i>
-        Voice Score: {report.voice_score}
-      </div>
-      <div className={`score score--${ScoreEvaluator.getScoreVariant(report.face_score)}`}>
-        <i className="fas fa-video icon-sm icon-primary"></i>
-        Face Score: {report.face_score}
-      </div>
-    </div>
-  );
-
-    
   const renderStarSection = () => {
     const starData = report?.star_analysis || report?.starAnalysis;
     const transcript = report?.transcript_debug;
 
     if (!starData || !transcript) {
-      console.log("returning null");
       return null;
     }
 
@@ -256,10 +248,6 @@ const FeedbackReport = React.memo(({ report }) => {
     return (
       <SectionWrapper title={UI_TEXT.STAR_ANALYSIS_TITLE} iconClass="fas fa-star" className="star-analysis">
         <div className="star-analysis">
-          {/* <h3 className="star-analysis__title">
-            <i className="fas fa-star icon-sm icon-warning"></i>
-            {UI_TEXT.STAR_ANALYSIS_TITLE}
-          </h3> */}
           <p style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
             Below is your full response. STAR components are <mark>highlighted</mark>:
           </p>
@@ -326,10 +314,6 @@ const FeedbackReport = React.memo(({ report }) => {
 
   const renderEyeTrackingSection = () => (
     <SectionWrapper title="Computer Vision Analysis" iconClass="fas fa-eye" className="eye-tracking">
-      {/* {!hasEyeData && (
-        <span className="section-warning">(No data captured)</span>
-      )} */}
-
       <div className="metric-grid">
         <MetricCard
           icon="fas fa-eye"
@@ -358,25 +342,64 @@ const FeedbackReport = React.memo(({ report }) => {
   );
 
   const renderHandTrackingSection = () => {
-    const firstHandSpeed = handData.handMetrics?.[0]?.speed ?? 0;
-    const firstHandError = handData.handMetrics?.[0]?.err ?? 0;
-    const handPosition = handData.feedback === 'Just right' ? 'Good' : 'Poor';
-    const handCount = handData.handMetrics?.length ?? 0;
+    // Calculate display metrics with fallbacks
+    const getDisplayMetrics = () => {
+      if (!handData.hasData || !handData.handMetrics || handData.handMetrics.length === 0) {
+        return {
+          gestureRecognition: 0,
+          movementAccuracy: 0,
+          handPosition: 'Poor',
+          handCount: 0
+        };
+      }
+
+      const firstHand = handData.handMetrics[0];
+      
+      // Safely extract metrics with fallbacks
+      const speed = typeof firstHand?.speed === 'number' ? firstHand.speed : 0;
+      const err = typeof firstHand?.err === 'number' ? firstHand.err : 0;
+      
+      // Convert to display metrics
+      const gestureRecognition = Math.min(100, Math.max(0, Math.round(speed / 2))); // Convert speed to 0-100 scale
+      const movementAccuracy = Math.min(100, Math.max(0, Math.round(100 - (err * 20)))); // Convert error to accuracy
+      const handPosition = handData.feedback === 'Just right' ? 'Good' : 
+                          handData.feedback === 'Too little – gesture more' ? 'Too Static' :
+                          handData.feedback === 'Too much – slow down' ? 'Too Active' : 'Variable';
+      const handCount = handData.handMetrics.length;
+      
+      return {
+        gestureRecognition,
+        movementAccuracy,
+        handPosition,
+        handCount
+      };
+    };
+
+    const displayMetrics = getDisplayMetrics();
 
     return (
       <SectionWrapper title="Hand Tracking Analysis" iconClass="fas fa-hand-paper" className="hand-tracking">
-        {/* {!handData.hasData && (
-          <span className="section-warning">(No data captured)</span>
-        )} */}
         <div className="metric-grid">
-          <MetricCard icon="fas fa-hand-rock" label="Gesture Recognition" value={`${Math.round(firstHandSpeed)}%`} />
-          <MetricCard icon="fas fa-hand-point-up" label="Movement Accuracy" value={`${Math.round(firstHandError)}%`} />
-          <MetricCard icon="fas fa-hand-spock" label="Hand Position" value={handPosition} />
+          <MetricCard icon="fas fa-hand-rock" label="Gesture Recognition" value={`${displayMetrics.gestureRecognition}%`} />
+          <MetricCard icon="fas fa-hand-point-up" label="Movement Accuracy" value={`${displayMetrics.movementAccuracy}%`} />
+          <MetricCard icon="fas fa-hand-spock" label="Hand Position" value={displayMetrics.handPosition} />
         </div>
+
         {handData.hasData ? (
-          <SuccessBanner text="Hand tracking completed successfully!" detail={`Feedback: ${handData.feedback || 'Unknown'} | Detected ${handCount} hand(s)`} />
+          <SuccessBanner 
+            text="Hand tracking completed successfully!" 
+            detail={`Feedback: ${handData.feedback || 'Unknown'} | Detected ${displayMetrics.handCount} hand(s)`} 
+          />
+        ) : handData.hasEverDetectedHands ? (
+          <WarningBanner
+            text="Hands were detected but no final data captured."
+            detail={`Possible causes:\n• Hands moved out of frame before session ended\n• Brief detection that didn't generate enough data\n• Data processing issue during session completion`}
+          />
         ) : (
-          <WarningBanner text="Hand tracking data was not captured." detail={`Possible causes:\n• Hands not visible in camera frame\n• Camera permissions not granted\n• Hand tracking model failed to load`} />
+          <WarningBanner 
+            text="Hand tracking data was not captured." 
+            detail={`Possible causes:\n• Hands not visible in camera frame\n• Camera permissions not granted\n• Hand tracking model failed to load`} 
+          />
         )}
       </SectionWrapper>
     );
@@ -395,7 +418,6 @@ const FeedbackReport = React.memo(({ report }) => {
 
     return (
       <SectionWrapper title="Voice Analysis" iconClass="fas fa-wave-square" className="voice-analysis">
-        {/* {!hasVoiceData && <span className="section-warning">(No data captured)</span>} */}
         <div className="metric-grid">
           <MetricCard icon="fas fa-volume-up" label="Avg Volume" value={`${voiceData.averageVolume}%`} color={getMetricColor(voiceData.averageVolume, 'volume')} />
           <MetricCard icon="fas fa-chart-line" label="Vol Variation" value={`${voiceData.volumeVariation}%`} color={getMetricColor(voiceData.volumeVariation, 'variation')} />
@@ -413,7 +435,6 @@ const FeedbackReport = React.memo(({ report }) => {
     );
   };
 
-
   const renderTipsSection = () => (
     <SectionWrapper title={UI_TEXT.TIPS_TITLE} iconClass="fas fa-lightbulb" className="tips-section">
       <div className="tips" style={{ marginTop: '0px' }}>
@@ -429,36 +450,16 @@ const FeedbackReport = React.memo(({ report }) => {
     </SectionWrapper>
   );
 
-
-  // const renderTranscriptSection = () => {
-  //   if (!report?.transcript_debug) return null;
-
-  //   return (
-  //     <div className="transcript">
-  //       <h3 className="transcript__header">
-  //         <i className="fas fa-file-alt icon-sm icon-primary"></i>
-  //         {UI_TEXT.TRANSCRIPT_TITLE_FEEDBACK}
-  //       </h3>
-  //       <div className="transcript__content">
-  //         {report.transcript_debug}
-  //       </div>
-  //     </div>
-  //   );
-  // };
-
   return (
     <div className="feedback-report">
       {renderProgressSavedIndicator()}
-      {/* {renderDummyLine()} */}
       {renderComprehensiveScoreSection()}
-      {/* {renderScoreSection()} */}
       <div className="feedback-report__content">
         {renderStarSection()}
         {renderEyeTrackingSection()}
         {renderHandTrackingSection()}
         {renderVoiceAnalysisSection()}
         {renderTipsSection()}
-        {/* {renderTranscriptSection()} */}
       </div>
     </div>
   );
