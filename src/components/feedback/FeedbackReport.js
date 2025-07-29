@@ -1,6 +1,5 @@
 /**
- * MERGED Feedback Report - Main's base with enhanced hand tracking display
- * Uses main's structure but includes proper hand data extraction and display
+ * FIXED Feedback Report - Uses REAL data instead of fixed values
  */
 
 import React, { useEffect, useState } from 'react';
@@ -13,50 +12,59 @@ import CountUp from 'react-countup';
 
 const FeedbackReport = React.memo(({ report }) => {
   const { isAuthenticated } = useAuth();
-  console.log('📝 FeedbackReport received:', report);
+  console.log('📝 FeedbackReport received report:', report);
   
-  // Extract voice data from report
+  // Extract REAL voice data from report
   const getVoiceData = () => {
-    return {
-      averageVolume: report?.averageVolume ?? 0,
-      volumeVariation: report?.volumeVariation ?? 0,
-      pitchVariation: report?.pitchVariation ?? 0,
-      speechRate: report?.speechRate ?? 0,
-      clarity: report?.clarity ?? 0,
-      totalSamples: report?.totalSamples ?? 0
+    const data = {
+      averageVolume: report?.averageVolume ?? report?.voiceAnalysis?.averageVolume ?? 0,
+      volumeVariation: report?.volumeVariation ?? report?.voiceAnalysis?.volumeVariation ?? 0,
+      pitchVariation: report?.pitchVariation ?? report?.voiceAnalysis?.pitchVariation ?? 0,
+      speechRate: report?.speechRate ?? report?.voiceAnalysis?.speechRate ?? 0,
+      clarity: report?.clarity ?? report?.voiceAnalysis?.clarity ?? 0,
+      totalSamples: report?.totalSamples ?? report?.voiceAnalysis?.totalSamples ?? 0
     };
+    console.log('🎙️ Extracted voice data:', data);
+    return data;
   };
 
-  // Extract eye tracking data
+  // Extract REAL eye tracking data
   const getEyeData = () => {
-    return {
-      eyeContactPercentage: report?.eyeContactPercentage ?? 0,
-      smilePercentage: report?.smilePercentage ?? 0,
-      sessionDuration: report?.sessionDuration ?? '00:00'
+    const data = {
+      eyeContactPercentage: report?.eyeContactPercentage ?? report?.eyeTracking?.eyeContactPercentage ?? 0,
+      smilePercentage: report?.smilePercentage ?? report?.eyeTracking?.smilePercentage ?? 0,
+      sessionDuration: report?.sessionDuration ?? report?.eyeTracking?.sessionTime ?? '00:00',
+      gazeStatus: report?.gazeStatus ?? report?.eyeTracking?.gazeStatus ?? 'Unknown',
+      totalFrames: report?.totalFrames ?? report?.eyeTracking?.totalFrames ?? 0
     };
+    console.log('👁️ Extracted eye data:', data);
+    return data;
   };
 
-  // Enhanced hand tracking data extraction with multiple fallbacks
+  // Extract REAL hand tracking data with multiple fallbacks
   const getHandData = () => {
-    // Try multiple locations for hand data
     const topLevelHandMetrics = report?.handMetrics || [];
     const nestedHandMetrics = report?.handTracking?.handMetrics || [];
     const topLevelFeedback = report?.feedback || report?.handFeedback;
     const nestedFeedback = report?.handTracking?.feedback;
     
-    // Use the data source that has the most information
     const handMetrics = topLevelHandMetrics.length > 0 ? topLevelHandMetrics : nestedHandMetrics;
     const feedback = topLevelFeedback || nestedFeedback || 'No data';
     
     const hasData = handMetrics && handMetrics.length > 0;
     const hasEverDetectedHands = report?.hasEverDetectedHands || report?.handTracking?.hasEverDetectedHands || false;
     
-    return {
+    const data = {
       handMetrics,
       feedback,
       hasData,
-      hasEverDetectedHands
+      hasEverDetectedHands,
+      totalDetections: report?.handTracking?.totalDetections || 0,
+      maxHandsDetected: report?.handTracking?.maxHandsDetected || handMetrics.length,
+      sessionDuration: report?.handTracking?.sessionDuration || 0
     };
+    console.log('🤲 Extracted hand data:', data);
+    return data;
   };
 
   const voiceData = getVoiceData();
@@ -65,11 +73,13 @@ const FeedbackReport = React.memo(({ report }) => {
   
   // Check if we have meaningful data
   const hasVoiceData = voiceData.averageVolume > 0 || voiceData.totalSamples > 0;
-  const hasEyeData = eyeData.eyeContactPercentage > 0 || eyeData.smilePercentage > 0 || eyeData.sessionDuration !== '00:00';
+  const hasEyeData = eyeData.eyeContactPercentage > 0 || eyeData.smilePercentage > 0 || eyeData.totalFrames > 0;
 
-  console.log('🎙️ Voice data:', voiceData, 'Has data:', hasVoiceData);
-  console.log('👁️ Eye data:', eyeData, 'Has data:', hasEyeData);
-  console.log('🤲 Hand data:', handData, 'Has data:', handData.hasData);
+  console.log('📊 Data analysis:', {
+    'Voice data': voiceData, 'Has voice data': hasVoiceData,
+    'Eye data': eyeData, 'Has eye data': hasEyeData,
+    'Hand data': handData, 'Has hand data': handData.hasData
+  });
 
   const renderProgressSavedIndicator = () => {
     if (!isAuthenticated) return null;
@@ -82,7 +92,7 @@ const FeedbackReport = React.memo(({ report }) => {
     );
   };
 
-  const MetricCard = ({ icon, label, value, color = '#374151' }) => (
+  const MetricCard = ({ icon, label, value, color = '#374151', detail = null }) => (
     <div className="metric-card">
       <div className="metric-card__icon">
         <i className={icon}></i>
@@ -92,6 +102,11 @@ const FeedbackReport = React.memo(({ report }) => {
           {value}
         </div>
         <div className="metric-card__label">{label}</div>
+        {detail && (
+          <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+            {detail}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -125,6 +140,76 @@ const FeedbackReport = React.memo(({ report }) => {
     </section>
   );
 
+  // FIXED: Use REAL data for comprehensive score calculation
+  const renderComprehensiveScoreSection = () => {
+    // Calculate scores based on actual data
+    const contentScore = Math.min(95, Math.max(60, 75 + (hasEyeData ? 10 : 0) + (hasVoiceData ? 10 : 0)));
+    const pitchScore = Math.min(95, Math.max(40, 
+      (voiceData.averageVolume * 0.5) + 
+      (voiceData.volumeVariation * 0.3) + 
+      (voiceData.clarity * 0.4) + 30
+    ));
+    const nonverbalScore = Math.min(95, Math.max(50,
+      (eyeData.eyeContactPercentage * 0.4) +
+      (eyeData.smilePercentage * 0.3) +
+      (handData.hasData ? 20 : 0) + 30
+    ));
+    
+    const overallScore = Math.round((contentScore + pitchScore + nonverbalScore) / 3);
+
+    const scores = [
+      { label: 'Content', value: Math.round(contentScore) },
+      { label: 'Voice', value: Math.round(pitchScore) },
+      { label: 'Nonverbal', value: Math.round(nonverbalScore) }
+    ];
+
+    return (
+      <div style={{ marginTop: '40px' }}>
+        <SectionWrapper
+          title="Performance Score (Based on Your Data)"
+          iconClass="fas fa-chart-line"
+          className="comprehensive-score"
+        >
+          <div className="score-section__content">
+            <div className="score-bars">
+              {scores.map((s, idx) => (
+                <DummyBar key={idx} label={s.label} value={s.value} />
+              ))}
+            </div>
+
+            <div className="score-overall">
+              <div className="score-overall__box">
+                <span className="score-overall__label">Overall Score</span>
+                <CountUp
+                  start={0}
+                  end={overallScore}
+                  duration={2}
+                  suffix="%"
+                  className="score-overall__value"
+                />
+              </div>
+            </div>
+            
+            {/* Show data sources */}
+            <div style={{ 
+              marginTop: '16px', 
+              padding: '12px', 
+              background: '#f9fafb', 
+              borderRadius: '8px',
+              fontSize: '12px',
+              color: '#374151'
+            }}>
+              <strong>Score based on:</strong><br/>
+              • Voice: {voiceData.totalSamples} samples, {voiceData.averageVolume}% avg volume<br/>
+              • Eye Contact: {eyeData.eyeContactPercentage}% contact, {eyeData.totalFrames} frames<br/>
+              • Hand Gestures: {handData.hasEverDetectedHands ? `✅ Detected (${handData.feedback})` : '❌ Not detected'}
+            </div>
+          </div>
+        </SectionWrapper>
+      </div>
+    );
+  };
+
   const DummyBar = ({ label, value }) => {
     const [width, setWidth] = React.useState(0);
 
@@ -141,52 +226,13 @@ const FeedbackReport = React.memo(({ report }) => {
             style={{
               width: `${width}%`,
               height: '100%',
-              backgroundColor: '#10b981',
+              backgroundColor: value >= 80 ? '#10b981' : value >= 60 ? '#f59e0b' : '#ef4444',
               borderRadius: '9999px',
               transition: 'width 2s ease-in-out',
             }}
           />
         </div>
         <span className="score-bar__value">{value}%</span>
-      </div>
-    );
-  };
-
-  const renderComprehensiveScoreSection = () => {
-    const scores = [
-      { label: 'Content', value: 85 },
-      { label: 'Pitch', value: 78 },
-      { label: 'Nonverbal', value: 92 }
-    ];
-
-    return (
-      <div style={{ marginTop: '40px' }}>
-        <SectionWrapper
-          title="Comprehensive Performance Score"
-          iconClass="fas fa-chart-line"
-          className="comprehensive-score"
-        >
-          <div className="score-section__content">
-            <div className="score-bars">
-              {scores.map((s, idx) => (
-                <DummyBar key={idx} label={s.label} value={s.value} />
-              ))}
-            </div>
-
-            <div className="score-overall">
-              <div className="score-overall__box">
-                <span className="score-overall__label">Overall Score</span>
-                <CountUp
-                  start={0}
-                  end={85}
-                  duration={2}
-                  suffix="%"
-                  className="score-overall__value"
-                />
-              </div>
-            </div>
-          </div>
-        </SectionWrapper>
       </div>
     );
   };
@@ -319,11 +365,20 @@ const FeedbackReport = React.memo(({ report }) => {
           icon="fas fa-eye"
           label="Eye Contact"
           value={`${eyeData.eyeContactPercentage}%`}
+          color={eyeData.eyeContactPercentage >= 70 ? '#10b981' : eyeData.eyeContactPercentage >= 50 ? '#f59e0b' : '#ef4444'}
+          detail={`${eyeData.totalFrames} frames analyzed`}
         />
         <MetricCard
           icon="fas fa-smile"
           label="Smile Rate"
           value={`${eyeData.smilePercentage}%`}
+          color={eyeData.smilePercentage >= 40 ? '#10b981' : eyeData.smilePercentage >= 20 ? '#f59e0b' : '#ef4444'}
+        />
+        <MetricCard
+          icon="fas fa-eye-dropper"
+          label="Gaze Direction"
+          value={eyeData.gazeStatus}
+          color={eyeData.gazeStatus === 'Camera' ? '#10b981' : '#f59e0b'}
         />
         <MetricCard
           icon="fas fa-clock"
@@ -332,46 +387,48 @@ const FeedbackReport = React.memo(({ report }) => {
         />
       </div>
 
-      {!hasEyeData && (
+      {hasEyeData ? (
+        <SuccessBanner 
+          text="Eye tracking analysis completed successfully!" 
+          detail={`Analyzed ${eyeData.totalFrames} video frames with ${eyeData.eyeContactPercentage}% eye contact and ${eyeData.smilePercentage}% smile rate.`} 
+        />
+      ) : (
         <WarningBanner
           text="Eye tracking data was not captured."
-          detail={`Please ensure your camera is working and your face is visible.`}
+          detail={`Please ensure your camera is working and your face is visible during the interview.`}
         />
       )}
     </SectionWrapper>
   );
 
   const renderHandTrackingSection = () => {
-    // Calculate display metrics with fallbacks
+    // Calculate display metrics with REAL data
     const getDisplayMetrics = () => {
       if (!handData.hasData || !handData.handMetrics || handData.handMetrics.length === 0) {
         return {
           gestureRecognition: 0,
           movementAccuracy: 0,
-          handPosition: 'Poor',
-          handCount: 0
+          handPosition: handData.hasEverDetectedHands ? 'Previously Detected' : 'Not Detected',
+          handCount: 0,
+          averageSpeed: 0
         };
       }
 
       const firstHand = handData.handMetrics[0];
-      
-      // Safely extract metrics with fallbacks
       const speed = typeof firstHand?.speed === 'number' ? firstHand.speed : 0;
       const err = typeof firstHand?.err === 'number' ? firstHand.err : 0;
       
-      // Convert to display metrics
-      const gestureRecognition = Math.min(100, Math.max(0, Math.round(speed / 2))); // Convert speed to 0-100 scale
-      const movementAccuracy = Math.min(100, Math.max(0, Math.round(100 - (err * 20)))); // Convert error to accuracy
-      const handPosition = handData.feedback === 'Just right' ? 'Good' : 
-                          handData.feedback === 'Too little – gesture more' ? 'Too Static' :
-                          handData.feedback === 'Too much – slow down' ? 'Too Active' : 'Variable';
+      const gestureRecognition = Math.min(100, Math.max(0, Math.round(speed / 2)));
+      const movementAccuracy = Math.min(100, Math.max(0, Math.round(100 - (err * 20))));
+      const handPosition = handData.feedback;
       const handCount = handData.handMetrics.length;
       
       return {
         gestureRecognition,
         movementAccuracy,
         handPosition,
-        handCount
+        handCount,
+        averageSpeed: speed
       };
     };
 
@@ -380,25 +437,47 @@ const FeedbackReport = React.memo(({ report }) => {
     return (
       <SectionWrapper title="Hand Tracking Analysis" iconClass="fas fa-hand-paper" className="hand-tracking">
         <div className="metric-grid">
-          <MetricCard icon="fas fa-hand-rock" label="Gesture Recognition" value={`${displayMetrics.gestureRecognition}%`} />
-          <MetricCard icon="fas fa-hand-point-up" label="Movement Accuracy" value={`${displayMetrics.movementAccuracy}%`} />
-          <MetricCard icon="fas fa-hand-spock" label="Hand Position" value={displayMetrics.handPosition} />
+          <MetricCard 
+            icon="fas fa-hand-rock" 
+            label="Gesture Recognition" 
+            value={`${displayMetrics.gestureRecognition}%`}
+            color={displayMetrics.gestureRecognition >= 60 ? '#10b981' : displayMetrics.gestureRecognition >= 30 ? '#f59e0b' : '#ef4444'}
+            detail={`Based on ${displayMetrics.averageSpeed}px/s movement`}
+          />
+          <MetricCard 
+            icon="fas fa-hand-point-up" 
+            label="Movement Accuracy" 
+            value={`${displayMetrics.movementAccuracy}%`}
+            color={displayMetrics.movementAccuracy >= 70 ? '#10b981' : displayMetrics.movementAccuracy >= 50 ? '#f59e0b' : '#ef4444'}
+          />
+          <MetricCard 
+            icon="fas fa-hand-spock" 
+            label="Hand Feedback" 
+            value={displayMetrics.handPosition}
+            color={displayMetrics.handPosition === 'Just right' ? '#10b981' : '#f59e0b'}
+          />
+          <MetricCard 
+            icon="fas fa-hands" 
+            label="Hands Detected" 
+            value={`${displayMetrics.handCount} hands`}
+            detail={handData.totalDetections > 0 ? `${handData.totalDetections} total detections` : 'None'}
+          />
         </div>
 
         {handData.hasData ? (
           <SuccessBanner 
             text="Hand tracking completed successfully!" 
-            detail={`Feedback: ${handData.feedback || 'Unknown'} | Detected ${displayMetrics.handCount} hand(s)`} 
+            detail={`Detected ${displayMetrics.handCount} hand(s) with "${handData.feedback}" movement pattern. Total detections: ${handData.totalDetections}`} 
           />
         ) : handData.hasEverDetectedHands ? (
           <WarningBanner
-            text="Hands were detected but no final data captured."
-            detail={`Possible causes:\n• Hands moved out of frame before session ended\n• Brief detection that didn't generate enough data\n• Data processing issue during session completion`}
+            text="Hands were detected but insufficient data for analysis."
+            detail={`Hands were briefly detected during the session but moved out of frame or data collection was insufficient for complete analysis.`}
           />
         ) : (
           <WarningBanner 
             text="Hand tracking data was not captured." 
-            detail={`Possible causes:\n• Hands not visible in camera frame\n• Camera permissions not granted\n• Hand tracking model failed to load`} 
+            detail={`Possible causes:\n• Hands not visible in camera frame\n• Camera permissions not granted\n• Hand tracking model failed to load\n• Hands moved too quickly to track`} 
           />
         )}
       </SectionWrapper>
@@ -408,10 +487,10 @@ const FeedbackReport = React.memo(({ report }) => {
   const renderVoiceAnalysisSection = () => {
     const getMetricColor = (value, type) => {
       switch (type) {
-        case 'volume': return value > 10 ? '#10b981' : value > 3 ? '#f59e0b' : '#000000';
-        case 'variation': return value > 15 ? '#10b981' : value > 5 ? '#f59e0b' : '#000000';
-        case 'rate': return value > 60 ? '#10b981' : value > 40 ? '#f59e0b' : '#000000';
-        case 'clarity': return value > 70 ? '#10b981' : value > 50 ? '#f59e0b' : '#000000';
+        case 'volume': return value > 10 ? '#10b981' : value > 3 ? '#f59e0b' : '#ef4444';
+        case 'variation': return value > 15 ? '#10b981' : value > 5 ? '#f59e0b' : '#ef4444';
+        case 'rate': return value > 60 ? '#10b981' : value > 40 ? '#f59e0b' : '#ef4444';
+        case 'clarity': return value > 70 ? '#10b981' : value > 50 ? '#f59e0b' : '#ef4444';
         default: return '#6b7280';
       }
     };
@@ -419,17 +498,54 @@ const FeedbackReport = React.memo(({ report }) => {
     return (
       <SectionWrapper title="Voice Analysis" iconClass="fas fa-wave-square" className="voice-analysis">
         <div className="metric-grid">
-          <MetricCard icon="fas fa-volume-up" label="Avg Volume" value={`${voiceData.averageVolume}%`} color={getMetricColor(voiceData.averageVolume, 'volume')} />
-          <MetricCard icon="fas fa-chart-line" label="Vol Variation" value={`${voiceData.volumeVariation}%`} color={getMetricColor(voiceData.volumeVariation, 'variation')} />
-          <MetricCard icon="fas fa-music" label="Tone Variation" value={`${voiceData.pitchVariation}%`} color={getMetricColor(voiceData.pitchVariation, 'variation')} />
-          <MetricCard icon="fas fa-tachometer-alt" label="Speech Rate" value={`${voiceData.speechRate}%`} color={getMetricColor(voiceData.speechRate, 'rate')} />
-          <MetricCard icon="fas fa-microphone" label="Clarity" value={`${voiceData.clarity}%`} color={getMetricColor(voiceData.clarity, 'clarity')} />
-          <MetricCard icon="fas fa-database" label="Samples" value={voiceData.totalSamples} />
+          <MetricCard 
+            icon="fas fa-volume-up" 
+            label="Average Volume" 
+            value={`${voiceData.averageVolume}%`} 
+            color={getMetricColor(voiceData.averageVolume, 'volume')}
+            detail={`From ${voiceData.totalSamples} samples`}
+          />
+          <MetricCard 
+            icon="fas fa-chart-line" 
+            label="Volume Variation" 
+            value={`${voiceData.volumeVariation}%`} 
+            color={getMetricColor(voiceData.volumeVariation, 'variation')}
+          />
+          <MetricCard 
+            icon="fas fa-music" 
+            label="Tone Variation" 
+            value={`${voiceData.pitchVariation}%`} 
+            color={getMetricColor(voiceData.pitchVariation, 'variation')}
+          />
+          <MetricCard 
+            icon="fas fa-tachometer-alt" 
+            label="Speech Rate" 
+            value={`${voiceData.speechRate}%`} 
+            color={getMetricColor(voiceData.speechRate, 'rate')}
+          />
+          <MetricCard 
+            icon="fas fa-microphone" 
+            label="Clarity" 
+            value={`${voiceData.clarity}%`} 
+            color={getMetricColor(voiceData.clarity, 'clarity')}
+          />
+          <MetricCard 
+            icon="fas fa-database" 
+            label="Total Samples" 
+            value={voiceData.totalSamples}
+          />
         </div>
+        
         {hasVoiceData ? (
-          <SuccessBanner text="Voice analysis completed successfully!" detail={`Captured ${voiceData.totalSamples} samples with ${voiceData.averageVolume}% average volume.`} />
+          <SuccessBanner 
+            text="Voice analysis completed successfully!" 
+            detail={`Captured ${voiceData.totalSamples} audio samples with ${voiceData.averageVolume}% average volume and ${voiceData.clarity}% clarity.`} 
+          />
         ) : (
-          <WarningBanner text="Voice analysis data was not captured." detail={`Possible causes:\n• Microphone not working or muted\n• Speaking too quietly\n• Browser permissions not granted`} />
+          <WarningBanner 
+            text="Voice analysis data was not captured." 
+            detail={`Possible causes:\n• Microphone not working or muted\n• Speaking too quietly\n• Browser permissions not granted\n• Audio processing issues`} 
+          />
         )}
       </SectionWrapper>
     );

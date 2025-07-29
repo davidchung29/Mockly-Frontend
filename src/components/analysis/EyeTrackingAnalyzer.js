@@ -1,11 +1,8 @@
 /**
- * Eye Tracking Analyzer Component
- * Integrates facial recognition and eye contact analysis into Mockly
- * MERGED VERSION - Background processing only, no visual overlays
+ * FIXED Eye Tracking Analyzer - MediaPipe FaceMesh v0.10.7 (Pinned Version)
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { DevHelpers } from '../../config/devConfig';
 
 const EyeTrackingAnalyzer = React.memo(({ 
   videoRef, 
@@ -13,120 +10,197 @@ const EyeTrackingAnalyzer = React.memo(({
   onMetricsUpdate,
   className = '' 
 }) => {
-  const modelRef = useRef();
+  const faceMeshRef = useRef();
   const animationFrameRef = useRef();
   const metricsRef = useRef({
     eyeContactFrames: 0,
     smileFrames: 0,
     totalFrames: 0,
-    startTime: Date.now()
+    startTime: Date.now(),
+    lastUpdateTime: Date.now()
   });
 
   const [metrics, setMetrics] = useState({
     eyeContactPercentage: 0,
     smilePercentage: 0,
     gazeStatus: 'Initializing',
-    sessionTime: '00:00'
+    sessionTime: '00:00',
+    totalFrames: 0,
+    currentlyDetecting: false
   });
 
   const [modelLoaded, setModelLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [isDetecting, setIsDetecting] = useState(false);
 
-  // Eye and mouth landmark indices from the FaceMesh model
-  const leftEyeIndices = [33, 133, 160, 144, 145, 153, 154, 155];
-  const rightEyeIndices = [362, 263, 387, 373, 374, 380, 381, 382];
-  const mouthIndices = [61, 84, 17, 314, 405, 320, 307, 375, 321, 308, 324, 318];
-  const lipCornerIndices = [61, 291]; // Left and right mouth corners
+  // MediaPipe FaceMesh results handler
+  const handleFaceMeshResults = useCallback((results) => {
+    if (!results || !isActive) return;
 
-  // Load the FaceMesh model
+    try {
+      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+        
+        console.log('👁️ MediaPipe v0.10.7 face detected with', landmarks.length, 'landmarks');
+        setIsDetecting(true);
+        
+        const eyeContactResult = analyzeEyeContact(landmarks);
+        const isSmiling = analyzeSmile(landmarks);
+        
+        updateMetrics(eyeContactResult, isSmiling);
+      } else {
+        console.log('👁️ No face detected by MediaPipe v0.10.7');
+        setIsDetecting(false);
+        updateMetrics({ isLooking: false, gazeStatus: 'No face detected' }, false);
+      }
+    } catch (error) {
+      console.error('❌ Error processing MediaPipe v0.10.7 face results:', error);
+    }
+  }, [isActive]);
+
+  // Load MediaPipe FaceMesh model with pinned version
   const loadModel = useCallback(async () => {
     try {
-      if (!window.facemesh) {
-        throw new Error('FaceMesh library not loaded. Please ensure TensorFlow.js and FaceMesh are included.');
+      console.log('👁️ Loading MediaPipe FaceMesh v0.10.7 for interview...');
+      
+      if (!window.FaceMesh) {
+        throw new Error('MediaPipe FaceMesh v0.10.7 not found. Check if scripts loaded properly.');
       }
       
-      DevHelpers.log('Loading FaceMesh model...');
-      modelRef.current = await window.facemesh.load();
-      setModelLoaded(true);
-      DevHelpers.log('✅ FaceMesh model loaded successfully');
-    } catch (err) {
-      DevHelpers.error('❌ Failed to load FaceMesh model:', err);
-      setError('Failed to load facial recognition model');
-    }
-  }, []);
+      const faceMesh = new window.FaceMesh({
+        locateFile: (file) => {
+          console.log('📁 FaceMesh v0.10.7 requesting file:', file);
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.10.7/${file}`;
+        }
+      });
 
-  // Analyze smile from facial landmarks
+      // Updated options for v0.10.7 compatibility
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      faceMesh.onResults(handleFaceMeshResults);
+      
+      faceMeshRef.current = faceMesh;
+      setModelLoaded(true);
+      console.log('✅ MediaPipe FaceMesh v0.10.7 loaded successfully for interview');
+      
+    } catch (err) {
+      console.error('❌ Failed to load MediaPipe FaceMesh v0.10.7 for interview:', err);
+      setError(`Failed to load face tracking v0.10.7: ${err.message}`);
+    }
+  }, [handleFaceMeshResults]);
+
+  // Analyze smile from MediaPipe landmarks
   const analyzeSmile = useCallback((landmarks) => {
     try {
-      const leftCorner = landmarks[61];
-      const rightCorner = landmarks[291];
-      const upperLipCenter = landmarks[13];
-      const lowerLipCenter = landmarks[14];
+      if (!landmarks || landmarks.length < 468) return false;
       
-      if (!leftCorner || !rightCorner || !upperLipCenter || !lowerLipCenter) {
+      // MediaPipe landmarks (normalized coordinates 0-1)
+      const leftCorner = landmarks[61];   // Left mouth corner
+      const rightCorner = landmarks[291]; // Right mouth corner
+      const upperLip = landmarks[13];     // Upper lip center
+      const lowerLip = landmarks[14];     // Lower lip center
+      
+      if (!leftCorner || !rightCorner || !upperLip || !lowerLip) {
         return false;
       }
       
-      // Calculate mouth width
+      // Calculate mouth width and height
       const mouthWidth = Math.sqrt(
-        Math.pow(rightCorner[0] - leftCorner[0], 2) + 
-        Math.pow(rightCorner[1] - leftCorner[1], 2)
+        Math.pow(rightCorner.x - leftCorner.x, 2) + 
+        Math.pow(rightCorner.y - leftCorner.y, 2)
       );
       
-      // Calculate mouth height
       const mouthHeight = Math.sqrt(
-        Math.pow(upperLipCenter[0] - lowerLipCenter[0], 2) + 
-        Math.pow(upperLipCenter[1] - lowerLipCenter[1], 2)
+        Math.pow(upperLip.x - lowerLip.x, 2) + 
+        Math.pow(upperLip.y - lowerLip.y, 2)
       );
       
-      // Calculate smile ratio and corner elevation
-      const smileRatio = mouthWidth / mouthHeight;
-      const mouthCenterY = (upperLipCenter[1] + lowerLipCenter[1]) / 2;
-      const cornerElevation = mouthCenterY - ((leftCorner[1] + rightCorner[1]) / 2);
+      // Calculate smile indicators
+      const smileRatio = mouthWidth / (mouthHeight + 0.001);
+      const mouthCenterY = (upperLip.y + lowerLip.y) / 2;
+      const cornerElevation = mouthCenterY - ((leftCorner.y + rightCorner.y) / 2);
       
-      return smileRatio > 3.2 && cornerElevation > 2;
+      // Adjusted thresholds for MediaPipe normalized coordinates
+      const isSmiling = smileRatio > 6 && cornerElevation > 0.003;
+      
+      return isSmiling;
     } catch (err) {
-      DevHelpers.error('Error analyzing smile:', err);
+      console.error('Error analyzing smile:', err);
       return false;
     }
   }, []);
 
-  // Analyze eye contact from facial landmarks
+  // Analyze eye contact from MediaPipe landmarks
   const analyzeEyeContact = useCallback((landmarks) => {
     try {
-      const leftEye = landmarks[33];
-      const rightEye = landmarks[362];
+      if (!landmarks || landmarks.length < 468) {
+        return { isLooking: false, gazeStatus: 'No landmarks' };
+      }
       
-      if (!leftEye || !rightEye) {
-        return { isLooking: false, gazeStatus: 'Eyes not detected' };
+      // MediaPipe landmarks for eyes (normalized coordinates)
+      const leftEye = landmarks[33];   // Left eye center
+      const rightEye = landmarks[362]; // Right eye center
+      const noseTip = landmarks[1];    // Nose tip
+      
+      if (!leftEye || !rightEye || !noseTip) {
+        return { isLooking: false, gazeStatus: 'Landmarks missing' };
       }
       
       const video = videoRef?.current;
-      if (!video) return { isLooking: false, gazeStatus: 'Video not ready' };
+      if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+        return { isLooking: false, gazeStatus: 'Video not ready' };
+      }
       
-      const centerX = (leftEye[0] + rightEye[0]) / 2;
-      const centerY = (leftEye[1] + rightEye[1]) / 2;
-      const videoCenter = { x: video.videoWidth / 2, y: video.videoHeight / 2 };
-      const distance = Math.sqrt((centerX - videoCenter.x) ** 2 + (centerY - videoCenter.y) ** 2);
+      // Calculate eye center (MediaPipe uses normalized 0-1 coordinates)
+      const eyeCenterX = (leftEye.x + rightEye.x) / 2;
+      const eyeCenterY = (leftEye.y + rightEye.y) / 2;
       
-      const isLooking = distance < 100;
-      const gazeStatus = isLooking ? 'Camera' : 'Away';
+      // Video center in normalized coordinates
+      const videoCenterX = 0.5;
+      const videoCenterY = 0.5;
+      
+      // Calculate distance from eye center to video center
+      const distanceX = Math.abs(eyeCenterX - videoCenterX);
+      const distanceY = Math.abs(eyeCenterY - videoCenterY);
+      const totalDistance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+      
+      // Eye contact threshold (in normalized coordinates)
+      const maxDistance = 0.12; // 12% of the frame
+      const isLooking = totalDistance < maxDistance;
+      
+      // Determine gaze direction
+      let gazeStatus = 'Camera';
+      if (!isLooking) {
+        if (distanceX > distanceY) {
+          gazeStatus = eyeCenterX < videoCenterX ? 'Left' : 'Right';
+        } else {
+          gazeStatus = eyeCenterY < videoCenterY ? 'Up' : 'Down';
+        }
+      }
       
       return { isLooking, gazeStatus };
     } catch (err) {
-      DevHelpers.error('Error analyzing eye contact:', err);
+      console.error('Error analyzing eye contact:', err);
       return { isLooking: false, gazeStatus: 'Analysis error' };
     }
   }, [videoRef]);
 
-  // Update metrics and notify parent component
+  // Update metrics with real-time calculations
   const updateMetrics = useCallback((eyeContactResult, isSmiling) => {
     const current = metricsRef.current;
+    const now = Date.now();
     
+    // Update counters
     if (eyeContactResult.isLooking) current.eyeContactFrames++;
     if (isSmiling) current.smileFrames++;
     current.totalFrames++;
     
+    // Calculate percentages
     const eyeContactPercentage = current.totalFrames > 0 
       ? Math.round((current.eyeContactFrames / current.totalFrames) * 100)
       : 0;
@@ -135,7 +209,8 @@ const EyeTrackingAnalyzer = React.memo(({
       ? Math.round((current.smileFrames / current.totalFrames) * 100)
       : 0;
     
-    const elapsed = Math.floor((Date.now() - current.startTime) / 1000);
+    // Calculate session time
+    const elapsed = Math.floor((now - current.startTime) / 1000);
     const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
     const seconds = (elapsed % 60).toString().padStart(2, '0');
     const sessionTime = `${minutes}:${seconds}`;
@@ -147,71 +222,77 @@ const EyeTrackingAnalyzer = React.memo(({
       sessionTime,
       totalFrames: current.totalFrames,
       eyeContactFrames: current.eyeContactFrames,
-      smileFrames: current.smileFrames
+      smileFrames: current.smileFrames,
+      currentlyDetecting: true
     };
     
-    // Update local state for display
+    // Update local state
     setMetrics(newMetrics);
     
-    // Always notify parent component of metrics update
-    if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
-      onMetricsUpdate(newMetrics);
-    } else {
-      console.warn('❌ onMetricsUpdate callback is missing or not a function:', {
-        onMetricsUpdate,
-        type: typeof onMetricsUpdate
-      });
+    // Throttle updates to parent (every 500ms)
+    if (now - current.lastUpdateTime > 500) {
+      current.lastUpdateTime = now;
+      if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
+        console.log('👁️ Sending MediaPipe v0.10.7 eye metrics update:', newMetrics);
+        onMetricsUpdate(newMetrics);
+      }
     }
   }, [onMetricsUpdate]);
 
-  // Main detection loop
+  // Detection loop with enhanced error handling for v0.10.7
   const detectFaces = useCallback(async () => {
-    if (!modelRef.current || !isActive || !videoRef?.current) {
+    if (!faceMeshRef.current || !isActive || !videoRef?.current) {
       return;
     }
     
     try {
       const video = videoRef.current;
-      if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+      
+      if (video.readyState >= 2 && 
+          video.videoWidth > 0 && 
+          video.videoHeight > 0 && 
+          !video.paused) {
         
-        const predictions = await modelRef.current.estimateFaces(video);
+        console.log('👁️ Processing video frame with MediaPipe v0.10.7...');
         
-        if (predictions.length > 0) {
-          const landmarks = predictions[0].scaledMesh;
-          
-          const eyeContactResult = analyzeEyeContact(landmarks);
-          const isSmiling = analyzeSmile(landmarks);
-          
-          updateMetrics(eyeContactResult, isSmiling);
-        } else {
-          // No face detected
-          updateMetrics({ isLooking: false, gazeStatus: 'No face detected' }, false);
+        // Enhanced error handling for v0.10.7
+        try {
+          await faceMeshRef.current.send({ image: video });
+        } catch (sendError) {
+          console.error('❌ MediaPipe v0.10.7 send error:', sendError);
+          // Don't throw, just log and continue
         }
       }
     } catch (err) {
-      DevHelpers.error('Error in face detection:', err);
-      updateMetrics({ isLooking: false, gazeStatus: 'Detection error' }, false);
+      console.error('❌ Error in MediaPipe v0.10.7 face detection:', err);
     }
     
-    if (isActive) {
-      animationFrameRef.current = requestAnimationFrame(detectFaces);
+    // Continue detection with proper timing
+    if (isActive && faceMeshRef.current) {
+      animationFrameRef.current = setTimeout(() => {
+        requestAnimationFrame(detectFaces);
+      }, 100); // Process at ~10 FPS
     }
-  }, [isActive, videoRef, analyzeEyeContact, analyzeSmile, updateMetrics]);
+  }, [isActive, videoRef]);
 
-  // Start/stop detection based on isActive prop
+  // Start/stop detection
   useEffect(() => {
-    if (isActive && modelLoaded) {
+    if (isActive && modelLoaded && videoRef?.current) {
+      console.log('👁️ Starting MediaPipe v0.10.7 eye tracking detection...');
       detectFaces();
     } else {
       if (animationFrameRef.current) {
-        DevHelpers.log('⏹️ Stopping eye tracking detection...');
-        cancelAnimationFrame(animationFrameRef.current);
+        clearTimeout(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
+      setIsDetecting(false);
+      console.log('👁️ MediaPipe v0.10.7 eye tracking detection stopped');
     }
     
     return () => {
       if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+        clearTimeout(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
     };
   }, [isActive, modelLoaded, detectFaces]);
@@ -219,43 +300,62 @@ const EyeTrackingAnalyzer = React.memo(({
   // Load model on mount
   useEffect(() => {
     loadModel();
+    
+    return () => {
+      if (faceMeshRef.current) {
+        try {
+          faceMeshRef.current.close();
+        } catch (e) {
+          console.warn('⚠️ Error closing MediaPipe v0.10.7 FaceMesh:', e);
+        }
+      }
+    };
   }, [loadModel]);
 
-  // Reset metrics when starting new session
+  // Reset metrics function
   const resetMetrics = useCallback(() => {
-    console.log('🔄 EyeTrackingAnalyzer resetMetrics called');
+    console.log('🔄 MediaPipe v0.10.7 EyeTrackingAnalyzer resetMetrics called');
     metricsRef.current = {
       eyeContactFrames: 0,
       smileFrames: 0,
       totalFrames: 0,
-      startTime: Date.now()
+      startTime: Date.now(),
+      lastUpdateTime: Date.now()
     };
-    setMetrics({
+    
+    const resetData = {
       eyeContactPercentage: 0,
       smilePercentage: 0,
       gazeStatus: 'Initializing',
-      sessionTime: '00:00'
-    });
+      sessionTime: '00:00',
+      totalFrames: 0,
+      currentlyDetecting: false
+    };
     
-    // Also notify parent of reset
+    setMetrics(resetData);
+    setIsDetecting(false);
+    
     if (onMetricsUpdate && typeof onMetricsUpdate === 'function') {
-      onMetricsUpdate({
-        eyeContactPercentage: 0,
-        smilePercentage: 0,
-        gazeStatus: 'Initializing',
-        sessionTime: '00:00',
-        totalFrames: 0,
-        eyeContactFrames: 0,
-        smileFrames: 0
-      });
+      onMetricsUpdate(resetData);
     }
   }, [onMetricsUpdate]);
+
+  // Expose reset function globally
+  useEffect(() => {
+    window.eyeTrackingReset = resetMetrics;
+    return () => {
+      delete window.eyeTrackingReset;
+    };
+  }, [resetMetrics]);
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'Camera': return '#00ff00';
-      case 'Away': return '#ff4444';
-      case 'No face detected': return '#ff0000';
+      case 'Left':
+      case 'Right':
+      case 'Up':
+      case 'Down': return '#ffaa00';
+      case 'No face detected': return '#ff4444';
       default: return '#ffffff';
     }
   };
@@ -264,7 +364,7 @@ const EyeTrackingAnalyzer = React.memo(({
     if (type === 'eyeContact') {
       return percentage >= 70 ? '#00ff00' : percentage >= 50 ? '#ffaa00' : '#ff4444';
     } else if (type === 'smile') {
-      return percentage >= 60 ? '#00ff00' : percentage >= 30 ? '#ffaa00' : '#ff4444';
+      return percentage >= 40 ? '#00ff00' : percentage >= 20 ? '#ffaa00' : '#ff4444';
     }
     return '#ffffff';
   };
@@ -286,10 +386,15 @@ const EyeTrackingAnalyzer = React.memo(({
         <div className="eye-tracking-status">
           <h4 className="eye-tracking-title">
             <i className="fas fa-eye icon-sm"></i>
-            Eye Contact Analysis
+            Eye Contact Analysis (MediaPipe v0.10.7)
           </h4>
           <div className="eye-tracking-status-text">
-            Status: {modelLoaded ? 'Active' : 'Loading...'}
+            Status: {modelLoaded && isActive ? (isDetecting ? 'Detecting' : 'Ready') : 'Loading...'}
+            {isDetecting && (
+              <span style={{ color: '#00ff00', marginLeft: '8px' }}>
+                ✓ Face Detected
+              </span>
+            )}
           </div>
         </div>
         
@@ -330,7 +435,35 @@ const EyeTrackingAnalyzer = React.memo(({
             </span>
             <span className="eye-tracking-stat-label">Session Time</span>
           </div>
+          
+          <div className="eye-tracking-stat">
+            <span className="eye-tracking-stat-value">
+              {metrics.totalFrames}
+            </span>
+            <span className="eye-tracking-stat-label">Total Frames</span>
+          </div>
         </div>
+
+        {/* Debug info for development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div style={{ 
+            marginTop: '12px', 
+            padding: '8px', 
+            background: '#f0f0f0', 
+            borderRadius: '4px',
+            fontSize: '11px',
+            fontFamily: 'monospace'
+          }}>
+            <strong>MediaPipe v0.10.7 Debug:</strong><br/>
+            Model: {modelLoaded ? '✅' : '❌'}<br/>
+            Active: {isActive ? '✅' : '❌'}<br/>
+            Detecting: {isDetecting ? '✅' : '❌'}<br/>
+            FaceMesh Available: {typeof window.FaceMesh !== 'undefined' ? '✅' : '❌'}<br/>
+            Frames: {metrics.totalFrames}<br/>
+            Eye Contact Frames: {metrics.eyeContactFrames}<br/>
+            Smile Frames: {metrics.smileFrames}
+          </div>
+        )}
       </div>
     </div>
   );

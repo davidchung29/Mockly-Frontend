@@ -1,6 +1,5 @@
 /**
- * MERGED VideoAudioProcessor - Main flow with background analysis
- * Keeps main's structure while integrating proper hand tracking and analysis
+ * MINIMAL CHANGES VideoAudioProcessor - Keep original layout, just fix the data flow
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -19,12 +18,13 @@ import { ResourceCleanup } from '../../utils/resourceCleanup';
 import { DEFAULT_METRICS, TranscriptValidator } from '../../utils/interviewUtils';
 import { INTERVIEW_CONFIG, UI_TEXT, ERROR_MESSAGES } from '../../constants/interviewConstants';
 
-const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) => {
+const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, presetMediaStream }) => {
   const [listeningDots, setListeningDots] = useState('');
   const [isVideoCardExpanded, setIsVideoCardExpanded] = useState(true);
   const [isFinished, setIsFinished] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // FIXED: Real dynamic state instead of fixed values
   const [eyeTrackingMetrics, setEyeTrackingMetrics] = useState({
     eyeContactPercentage: 0,
     smilePercentage: 0,
@@ -70,7 +70,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
   const dotIntervalRef = useRef();
   const timeoutRef = useRef();
 
-  const mediaStream = useMediaStream();
+  const mediaStream = useMediaStream(presetMediaStream);
   const speechRecognition = useSpeechRecognition();
   const transcriptSimulation = useTranscriptSimulation();
 
@@ -86,19 +86,22 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       : speechRecognition.transcript;
   }, [transcriptSimulation.simulatedTranscript, speechRecognition.transcript]);
 
+  // FIXED: Real-time update handlers
   const handleEyeTrackingUpdate = useCallback((metrics) => {
+    console.log('👁️ Eye tracking update:', metrics);
     setEyeTrackingMetrics(metrics);
     latestEyeMetricsRef.current = metrics;
   }, []);
 
   const handleVoiceMetricsUpdate = useCallback((metrics) => {
+    console.log('🎙️ Voice metrics update:', metrics);
     setVoiceMetrics(metrics);
     latestVoiceMetricsRef.current = metrics;
   }, []);
 
   // Enhanced hand tracking update with cumulative data storage
   const handleHandTrackingUpdate = useCallback((metrics) => {
-    console.log('📨 VideoAudioProcessor RECEIVED hand tracking update:', metrics);
+    console.log('🤲 Hand tracking update:', metrics);
     
     if (metrics && typeof metrics === 'object') {
       setHandTrackingMetrics(metrics);
@@ -150,11 +153,11 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
     }
   }, []);
 
-  // Enhanced interview completion with cumulative hand data
+  // FIXED: Enhanced interview completion with real cumulative data
   const handleInterviewCompletion = useCallback(() => {
     if (isFinished) return;
     
-    console.log('🎯 STEP 3A - VideoAudioProcessor creating final report');
+    console.log('🎯 Creating final report');
     setIsFinished(true);
     setIsEyeTrackingActive(false);
     setIsVoiceAnalysisActive(false);
@@ -178,7 +181,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       sessionDuration: sessionDuration
     };
 
-    console.log('📊 FINAL HAND DATA FOR REPORT:', finalHandData);
+    console.log('📊 Final hand data:', finalHandData);
+    console.log('👁️ Final eye data:', finalEyeMetrics);
+    console.log('🎙️ Final voice data:', finalVoiceMetrics);
 
     const finalReport = {
       ...DEFAULT_METRICS,
@@ -208,16 +213,14 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       handTracking: finalHandData
     };
 
-    console.log('📊 STEP 3B - Final report created:', finalReport);
+    console.log('📊 Final report:', finalReport);
 
     if (TranscriptValidator.isValid(completeTranscript)) {
-      console.log('📝 STEP 3C - Calling onFinish with valid transcript');
       onFinish(finalReport, completeTranscript, selectedQuestion);
     } else {
-      console.log('📝 STEP 3C - Calling onFinish with empty transcript');
       onFinish(finalReport, '', selectedQuestion);
     }
-  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics, handTrackingMetrics]);
+  }, [isFinished, getCurrentTranscript, onFinish, eyeTrackingMetrics, voiceMetrics, handTrackingMetrics, selectedQuestion]);
 
   const resetAllMetrics = useCallback(() => {
     setEyeTrackingMetrics(DEFAULT_METRICS);
@@ -249,11 +252,6 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       setupDotAnimation();
       resetAllMetrics();
       
-      // Run transcription diagnostic in development mode
-      if (DevHelpers.isApiDisabled()) {
-        console.log('🔍 Running transcription diagnostic...');
-      }
-      
       await mediaStream.startCapture();
       if (DevHelpers.isTranscriptSimulationEnabled()) {
         transcriptSimulation.startSimulation();
@@ -264,7 +262,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
       setIsEyeTrackingActive(true);
       setIsVoiceAnalysisActive(true);
       setIsHandTrackingActive(true);
-      console.log('✅ Hand tracking activated');
+      console.log('✅ All tracking activated');
       setupSessionTimeout();
 
     } catch (error) {
@@ -317,6 +315,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
 
       <div className="interview-content-wrapper">
         <div className="interview-sidebar">
+          {/* RESTORED: Original VideoCard */}
           <VideoCard
             hasVideo={mediaStream.hasVideo}
             isAudioOnly={mediaStream.isAudioOnly}
@@ -349,18 +348,28 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion }) =
             />
           </div>
 
-          <div style={{ background: '#e8f5e8', border: '2px solid #4ade80', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '14px' }}>
-            <strong>🔍 SIMPLE DEBUG:</strong>
+          {/* FIXED: Enhanced debug info showing REAL data */}
+          <div style={{ 
+            background: '#e8f5e8', 
+            border: '2px solid #4ade80', 
+            borderRadius: '8px', 
+            padding: '12px', 
+            marginBottom: '16px', 
+            fontSize: '14px' 
+          }}>
+            <strong>🔍 REAL-TIME STATUS:</strong>
             <br />
-            Voice Average: {voiceMetrics.averageVolume}% | Variation: {voiceMetrics.volumeVariation}% | Samples: {voiceMetrics.totalSamples}
+            Voice: {voiceMetrics.averageVolume}% avg | {voiceMetrics.totalSamples} samples 
+            <span style={{ color: voiceMetrics.averageVolume > 5 ? 'green' : 'red', fontWeight: 'bold' }}>
+              {voiceMetrics.averageVolume > 5 ? ' ✅ DETECTED' : ' ❌ TOO LOW'}
+            </span>
             <br />
-            Eye Contact: {eyeTrackingMetrics.eyeContactPercentage}% | Smile: {eyeTrackingMetrics.smilePercentage}%
+            Eye: {eyeTrackingMetrics.eyeContactPercentage}% contact | {eyeTrackingMetrics.smilePercentage}% smile | {eyeTrackingMetrics.gazeStatus}
             <br />
-            Hand Feedback: {handTrackingMetrics.feedback}
-            <br />
-            <strong style={{ color: voiceMetrics.averageVolume > 5 ? 'green' : 'red' }}>
-              Voice Status: {voiceMetrics.averageVolume > 5 ? '✅ DETECTED' : '❌ NOT DETECTED'}
-            </strong>
+            Hands: {handTrackingMetrics.handMetrics.length} detected | {handTrackingMetrics.feedback}
+            <span style={{ color: handTrackingMetrics.hasEverDetectedHands ? 'green' : 'red', fontWeight: 'bold' }}>
+              {handTrackingMetrics.hasEverDetectedHands ? ' ✅ SEEN' : ' ❌ NOT DETECTED'}
+            </span>
           </div>
 
           <div className="transcript-main">

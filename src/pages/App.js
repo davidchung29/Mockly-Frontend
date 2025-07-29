@@ -1,7 +1,7 @@
 /**
  * Main App Component
  * Handles interview flow and state management
- * WITH DEBUGGING FOR EYE TRACKING DATA FLOW
+ * WITH DEBUGGING FOR EYE TRACKING DATA FLOW AND LOADING SCREEN INTEGRATION
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -11,6 +11,7 @@ import Header from '../components/layout/Header';
 import AuthModal from '../components/auth/AuthModal';
 import UserProfile from '../components/profile/UserProfile';
 import InterviewSession from '../components/interview/InterviewSession';
+import LoadingScreen from '../components/interview/LoadingScreen';
 import VideoAudioProcessor from '../components/analysis/VideoAudioProcessor';
 import FeedbackReport from '../components/feedback/FeedbackReport';
 import ProcessingScreen from '../components/feedback/ProcessingScreen';
@@ -21,12 +22,13 @@ import '../styles/theme.css';
 
 const App = () => {
   // App state
-  const [currentView, setCurrentView] = useState('interview'); // 'interview', 'video-interview', 'processing', 'feedback', 'profile'
+  const [currentView, setCurrentView] = useState('interview'); // 'interview', 'setup', 'video-interview', 'processing', 'feedback', 'profile'
   const [selectedQuestion, setSelectedQuestion] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [feedbackReport, setFeedbackReport] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [profileKey, setProfileKey] = useState(0); // Add key for forcing UserProfile re-mount
+  const [presetMediaStream, setPresetMediaStream] = useState(null); // New: for LoadingScreen integration
 
   // Get authentication state
   const { isAuthenticated, loading, getAuthHeaders } = useAuth();
@@ -156,10 +158,24 @@ const App = () => {
         eyeContactPercentage: metrics.eyeContactPercentage,
         smilePercentage: metrics.smilePercentage,
         sessionDuration: metrics.sessionDuration,
+        // Also add hand tracking data
+        handMetrics: metrics.handMetrics,
+        feedback: metrics.feedback,
+        handFeedback: metrics.handFeedback,
+        hasEverDetectedHands: metrics.hasEverDetectedHands,
+        // Voice analysis data
+        averageVolume: metrics.averageVolume,
+        volumeVariation: metrics.volumeVariation,
+        pitchVariation: metrics.pitchVariation,
+        speechRate: metrics.speechRate,
+        clarity: metrics.clarity,
+        totalSamples: metrics.totalSamples,
         // Also add to metrics object for compatibility
         metrics: {
           eyeTracking: metrics.eyeTracking,
-          eye_tracking: metrics.eye_tracking
+          eye_tracking: metrics.eye_tracking,
+          handTracking: metrics.handTracking,
+          voiceAnalysis: metrics.voiceAnalysis
         }
       };
       
@@ -206,6 +222,18 @@ const App = () => {
       sessionDuration: metrics.sessionDuration,
       eyeTracking: metrics.eyeTracking,
       eye_tracking: metrics.eye_tracking,
+      // Include hand tracking data
+      handMetrics: metrics.handMetrics,
+      feedback: metrics.feedback,
+      handFeedback: metrics.handFeedback,
+      hasEverDetectedHands: metrics.hasEverDetectedHands,
+      // Include voice analysis data
+      averageVolume: metrics.averageVolume,
+      volumeVariation: metrics.volumeVariation,
+      pitchVariation: metrics.pitchVariation,
+      speechRate: metrics.speechRate,
+      clarity: metrics.clarity,
+      totalSamples: metrics.totalSamples,
       question_id: questionId
     };
     
@@ -276,39 +304,60 @@ const App = () => {
       console.log('🔧 API failed, falling back to mock processing');
       handleMockProcessing(metrics, transcript, questionId);
     }
-  }, [isAuthenticated, getAuthHeaders, saveUserProgress]);
+  }, [isAuthenticated, getAuthHeaders, saveUserProgress, handleMockProcessing]);
 
-  // Handle interview start
+  // Handle interview start - go to setup first
   const handleInterviewStart = useCallback((questionId) => {
-    console.log('🎬 Starting interview with question:', questionId);
+    console.log('🎬 Starting interview setup with question:', questionId);
     setSelectedQuestion(questionId);
-    setCurrentView('video-interview');
+    setCurrentView('setup'); // Changed from 'video-interview' to 'setup'
     setFeedbackReport(null);
+  }, []);
+
+  // Handle setup completion - go to actual interview
+  const handleSetupComplete = useCallback((mediaStream) => {
+    console.log('✅ Setup complete, starting interview with preset stream');
+    setPresetMediaStream(mediaStream);
+    setCurrentView('video-interview');
   }, []);
 
   // Handle interview end (back to question selection)
   const handleInterviewEnd = useCallback(() => {
     console.log('🛑 Interview ended, returning to question selection');
     console.log('🔍 selectedQuestion before clearing:', selectedQuestion);
+    
+    // Stop preset media stream if it exists
+    if (presetMediaStream) {
+      presetMediaStream.getTracks().forEach(track => track.stop());
+      setPresetMediaStream(null);
+    }
+    
     setCurrentView('interview');
     setSelectedQuestion('');
     setFeedbackReport(null);
     setIsProcessing(false);
-  }, [selectedQuestion]);
+  }, [selectedQuestion, presetMediaStream]);
 
   // Handle start new interview from feedback
   const handleStartNewInterview = useCallback(() => {
     console.log('🔄 Starting new interview from feedback');
+    
+    // Stop preset media stream if it exists
+    if (presetMediaStream) {
+      presetMediaStream.getTracks().forEach(track => track.stop());
+      setPresetMediaStream(null);
+    }
+    
     setCurrentView('interview');
     setSelectedQuestion('');
     setFeedbackReport(null);
     setIsProcessing(false);
-  }, []);
+  }, [presetMediaStream]);
 
   // Navigation handlers
   const handleNavigateToProfile = useCallback(() => {
     // Check if user is currently in an interview session
-    if (currentView === 'video-interview') {
+    if (currentView === 'video-interview' || currentView === 'setup') {
       const confirmEndInterview = window.confirm(UI_TEXT.NAVIGATION_CONFIRMATION);
       if (!confirmEndInterview) {
         return; // User cancelled, stay in interview
@@ -318,15 +367,21 @@ const App = () => {
     }
     setProfileKey(prev => prev + 1); // Force UserProfile re-mount
     setCurrentView('profile');
-  }, [currentView]);
+  }, [currentView, handleInterviewEnd]);
 
   const handleNavigateToInterview = useCallback((questionId = null) => {
+    // Stop preset media stream if it exists
+    if (presetMediaStream) {
+      presetMediaStream.getTracks().forEach(track => track.stop());
+      setPresetMediaStream(null);
+    }
+    
     setCurrentView('interview');
     setFeedbackReport(null);
     
     // Set the selected question ID
     setSelectedQuestion(questionId || '');
-  }, []);
+  }, [presetMediaStream]);
 
   const handleShowAuthModal = useCallback(() => {
     setShowAuthModal(true);
@@ -346,6 +401,15 @@ const App = () => {
             currentView={currentView}
             onNavigateToInterview={handleNavigateToInterview} 
           />
+        );
+
+      case 'setup':
+        return (
+          <div className="app__main">
+            <div className="app__container">
+              <LoadingScreen onDone={handleSetupComplete} />
+            </div>
+          </div>
         );
         
       case 'processing':
@@ -389,6 +453,7 @@ const App = () => {
                     onFinish={handleInterviewFinish}
                     onEnd={handleInterviewEnd}
                     selectedQuestion={selectedQuestion}
+                    presetMediaStream={presetMediaStream}
                   />
                 </div>
               </div>
