@@ -5,7 +5,6 @@ import VideoCard from '../layout/VideoCard';
 import EyeTrackingAnalyzer from './EyeTrackingAnalyzer';
 import HandTrackingAnalyzer from './HandTrackingAnalyzer';
 import './Transcript.css';
-
 import { useMediaStream } from '../../hooks/useMediaStream';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { useTranscriptSimulation } from '../../hooks/useTranscriptSimulation';
@@ -157,7 +156,22 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, pre
   const setupSessionTimeout = useCallback(() => {
     clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      if (!isFinished) handleInterviewCompletion();
+      if (!isFinished) {
+        // STOP EVERYTHING when timeout occurs
+        setIsEyeTrackingActive(false);
+        setIsVoiceAnalysisActive(false);
+        setIsHandTrackingActive(false);
+        
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+        if (dotIntervalRef.current) {
+          clearInterval(dotIntervalRef.current);
+        }
+        
+        setShowConfirmationModal(true);
+        setPendingEnd(false);
+      }
     }, INTERVIEW_CONFIG.sessionDuration);
   }, [isFinished]);
 
@@ -206,12 +220,9 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, pre
 
     console.log('📊 STEP 3B - Final report created with edited transcript:', finalReport);
 
-    // Close modal and proceed with normal flow
+    // Close modal and proceed with normal flow (analysis already stopped)
     setShowConfirmationModal(false);
     setIsFinished(true);
-    setIsEyeTrackingActive(false);
-    setIsVoiceAnalysisActive(false);
-    setIsHandTrackingActive(false);
 
     if (TranscriptValidator.isValid(finalTranscript)) {
       console.log('📝 STEP 3C - Calling onFinish with edited transcript');
@@ -223,16 +234,50 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, pre
   }, [editableTranscript, onFinish, eyeTrackingMetrics, voiceMetrics, handTrackingMetrics, selectedQuestion]);
 
   const handleInterviewCompletion = useCallback(() => {
-    if (isFinished) return;
+    if (isFinished || showConfirmationModal) return;
     
-    // NEW: Show confirmation modal instead of immediately finishing
-    setShowConfirmationModal(true);
-    setPendingEnd(false);
-  }, [isFinished]);
+    // STOP SPEECH RECOGNITION FIRST
+    speechRecognition.stopListening();
+    transcriptSimulation.stopSimulation();
+    
+    // NEW: Stop everything when completing interview (Skip button)
+    setIsEyeTrackingActive(false);
+    setIsVoiceAnalysisActive(false);
+    setIsHandTrackingActive(false);
+    
+    // Stop timer and other resources
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    if (dotIntervalRef.current) {
+      clearInterval(dotIntervalRef.current);
+    }
+    
+    console.log('Setting modal to show...');
+    
+    // Use setTimeout to ensure speech recognition stops before modal shows
+    setTimeout(() => {
+      setShowConfirmationModal(true);
+      setPendingEnd(false);
+    }, 100);
+  }, [isFinished, showConfirmationModal, speechRecognition, transcriptSimulation]);
 
   // NEW: Handle interview end button click
   const handleEndClick = useCallback(() => {
     if (!isFinished && window.confirm(UI_TEXT.END_CONFIRMATION)) {
+      // STOP EVERYTHING IMMEDIATELY when user presses end
+      setIsEyeTrackingActive(false);
+      setIsVoiceAnalysisActive(false);
+      setIsHandTrackingActive(false);
+      
+      // Stop timer and other resources
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      if (dotIntervalRef.current) {
+        clearInterval(dotIntervalRef.current);
+      }
+      
       setPendingEnd(true);
       setShowConfirmationModal(true);
     }
@@ -331,7 +376,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, pre
   useEffect(() => {
     let timerInterval;
 
-    if (isInitialized) {
+    if (isInitialized && !showConfirmationModal) {
       timerInterval = setInterval(() => {
         setElapsedTime((prev) => prev + 1);
       }, 1000);
@@ -340,7 +385,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, pre
     return () => {
       clearInterval(timerInterval);
     };
-  }, [isInitialized]);
+  }, [isInitialized, showConfirmationModal]);
 
   if (mediaStream.permissionState !== 'granted') {
     return (
@@ -468,7 +513,7 @@ const VideoAudioProcessor = React.memo(({ onFinish, onEnd, selectedQuestion, pre
         </button>
 
         <button className="button interview-layout__done-button" onClick={() => {
-          if (!isFinished && window.confirm(UI_TEXT.SKIP_CONFIRMATION)) {
+          if (!isFinished && !showConfirmationModal && window.confirm(UI_TEXT.SKIP_CONFIRMATION)) {
             handleInterviewCompletion();
           }
         }}>
