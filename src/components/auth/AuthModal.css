@@ -30,6 +30,22 @@
   padding: 24px 24px 0;
 }
 
+.auth-modal-header::before {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+
+.auth-modal-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  text-align: center;
+  flex: 1;
+}
+
 .auth-tabs {
   display: flex;
   background: #f5f5f5;

@@ -165,6 +165,7 @@ const AuthModal = ({ isOpen, onClose, defaultTab = 'login' }) => {
            *   <button className="auth-tab active">Sign In</button>
            * </div>
            */}
+          <h2 className="auth-modal-title">Sign in</h2>
           <button className="auth-modal-close" onClick={onClose}>×</button>
         </div>
 
