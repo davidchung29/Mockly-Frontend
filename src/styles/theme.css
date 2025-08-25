@@ -474,6 +474,24 @@ p {
   margin-bottom: var(--spacing-md);
 }
 
+.question-selector__row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  width: 100%;
+}
+
+.question-selector__row .question-selector__dropdown {
+  flex: 1 1 auto;
+  min-width: 0; /* allow select to shrink so button stays visible */
+  max-width: 100%;
+}
+
+.question-selector__row .question-selector__random {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .question-selector__label {
   font-size: var(--font-size-sm);
   font-weight: 600;

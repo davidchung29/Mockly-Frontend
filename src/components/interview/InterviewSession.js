@@ -97,6 +97,37 @@ const InterviewSession = React.memo(({ onStart, initialQuestion = '', onShowAuth
               <option key={category.id} value={category.id}>{category.name}</option>
             ))}
           </select>
+        </div>
+
+        <label htmlFor="question-select" className="question-selector__label">
+          <i className="fas fa-question-circle icon-sm icon-primary"></i>
+          Choose your question:
+        </label>
+        <div className="question-selector__row">
+          <select
+            id="question-select"
+            className={`question-selector__dropdown ${validationError ? 'question-selector__dropdown--error' : ''}`}
+            value={selectedQuestion}
+            onChange={handleQuestionChange}
+            required
+            aria-invalid={Boolean(validationError)}
+            aria-describedby={validationError ? 'question-error' : undefined}
+          >
+            <option value="">Select a behavioral question...</option>
+            {hasFilter
+              ? getQuestionsByCategory(selectedCategory).map((question) => (
+                  <option key={question.id} value={question.id}>
+                    {question.text}
+                  </option>
+                ))
+              : categories.map(category => (
+                  <optgroup key={category.id} label={category.name}>
+                    {category.questions.map(question => (
+                      <option key={question.id} value={question.id}>{question.text}</option>
+                    ))}
+                  </optgroup>
+                ))}
+          </select>
           <button
             type="button"
             className="button button--small question-selector__random"
@@ -107,35 +138,6 @@ const InterviewSession = React.memo(({ onStart, initialQuestion = '', onShowAuth
             Random
           </button>
         </div>
-
-        <label htmlFor="question-select" className="question-selector__label">
-          <i className="fas fa-question-circle icon-sm icon-primary"></i>
-          Choose your question:
-        </label>
-        <select
-          id="question-select"
-          className={`question-selector__dropdown ${validationError ? 'question-selector__dropdown--error' : ''}`}
-          value={selectedQuestion}
-          onChange={handleQuestionChange}
-          required
-          aria-invalid={Boolean(validationError)}
-          aria-describedby={validationError ? 'question-error' : undefined}
-        >
-          <option value="">Select a behavioral question...</option>
-          {hasFilter
-            ? getQuestionsByCategory(selectedCategory).map((question) => (
-                <option key={question.id} value={question.id}>
-                  {question.text}
-                </option>
-              ))
-            : categories.map(category => (
-                <optgroup key={category.id} label={category.name}>
-                  {category.questions.map(question => (
-                    <option key={question.id} value={question.id}>{question.text}</option>
-                  ))}
-                </optgroup>
-              ))}
-        </select>
         {renderValidationError()}
       </div>
     );
