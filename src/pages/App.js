@@ -38,7 +38,7 @@ const App = () => {
   // Initialize PostHog on app mount
   useEffect(() => {
     initializePostHog();
-    console.log('📊 PostHog initialized for lean startup analytics');
+    console.log('PostHog initialized for lean startup analytics');
   }, []);
 
   // Track user identification when authenticated
@@ -50,7 +50,7 @@ const App = () => {
         last_name: user.last_name,
         signup_date: user.created_at,
       });
-      console.log('👤 User identified in PostHog:', user.email);
+      console.log('User identified in PostHog:', user.email);
     }
   }, [isAuthenticated, user]);
 
@@ -71,6 +71,10 @@ const App = () => {
     console.log('questionId passed from VideoAudioProcessor:', questionId);
     console.log('Metrics JSON:', JSON.stringify(metrics, null, 2));
     console.log('Metrics keys:', Object.keys(metrics || {}));
+    
+    // Check API mode
+    console.log('DevHelpers.isApiDisabled():', DevHelpers.isApiDisabled());
+    console.log('Using mock processing?', DevHelpers.isApiDisabled());
     
     // Check if eye tracking data is still present
     if (metrics.eyeTracking || metrics.eye_tracking) {
@@ -107,11 +111,11 @@ const App = () => {
     // Simulate processing or make API call
     if (DevHelpers.isApiDisabled()) {
       // Mock processing for development
-      console.log('🔧 STEP 5 - Mock processing (Dev mode)');
+      console.log('STEP 5 - Mock processing (Dev mode)');
       handleMockProcessing(metrics, transcript, questionId);
     } else {
       // Real API call
-      console.log('🌐 STEP 5 - Real API processing');
+      console.log('STEP 5 - Real API processing');
       handleRealProcessing(metrics, transcript, questionId);
     }
   }, []);
@@ -119,11 +123,11 @@ const App = () => {
   // Save user progress function
   const saveUserProgress = useCallback(async (responseData, metrics, transcript) => {
     if (!isAuthenticated) {
-      console.log('👤 User not authenticated, skipping progress save');
+      console.log('User not authenticated, skipping progress save');
       return;
     }
 
-    console.log('💾 Saving user progress...');
+    console.log('Saving user progress...');
     
     const progressData = {
       question_type: 'behavioral', // Always behavioral for now
@@ -139,7 +143,7 @@ const App = () => {
         null
     };
 
-    console.log('📊 Progress data to save:', progressData);
+    console.log('Progress data to save:', progressData);
 
     const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
     
@@ -154,27 +158,33 @@ const App = () => {
 
     if (response.ok) {
       const savedProgress = await response.json();
-      console.log('✅ User progress saved successfully:', savedProgress);
+      console.log('User progress saved successfully:', savedProgress);
     } else {
       const errorData = await response.json();
-      console.error('❌ Failed to save progress:', errorData);
+      console.error('Failed to save progress:', errorData);
       throw new Error(`Failed to save progress: ${errorData.detail || 'Unknown error'}`);
     }
   }, [isAuthenticated, selectedQuestion, getAuthHeaders]);
 
   // Mock processing function with debugging
   const handleMockProcessing = useCallback((metrics, transcript, questionId) => {
-    console.log('🔧 STEP 5A - Mock processing started');
-    console.log('📤 Input metrics to mock processing:', metrics);
-    console.log('📝 Input transcript to mock processing:', transcript);
-    console.log('🎯 Question ID passed to handleMockProcessing:', questionId);
+    console.log('STEP 5A - Mock processing started');
+    console.log('Input metrics to mock processing:', metrics);
+    console.log('Input transcript to mock processing:', transcript);
+    console.log('Question ID passed to handleMockProcessing:', questionId);
+    
+    // Check face score in mock response
+    console.log('CREATING MOCK RESPONSE - FACE SCORE DEBUG:');
+    console.log('Original face score from metrics:', metrics.faceScore || metrics.face_score);
+    console.log('Eye contact percentage:', metrics.eyeContactPercentage);
+    console.log('Smile percentage:', metrics.smilePercentage);
     
     // Simulate processing delay
     setTimeout(async () => {
       const mockResponse = {
         content_score: 4.2,
         voice_score: 3.8,
-        face_score: 4,
+        face_score: 4,  // HARDCODED VALUE - THIS MIGHT BE THE PROBLEM!
         star_analysis: {
           situation: ['I was working as a software engineer at a tech startup'],
           task: ['I needed to implement a new feature within a tight deadline'],
@@ -200,15 +210,16 @@ const App = () => {
         }
       };
       
-      console.log('📥 STEP 5B - Mock response created:', mockResponse);
-      console.log('🔍 Mock response JSON:', JSON.stringify(mockResponse, null, 2));
+      console.log('MOCK RESPONSE FACE SCORE:', mockResponse.face_score);
+      console.log('STEP 5B - Mock response created:', mockResponse);
+      console.log('Mock response JSON:', JSON.stringify(mockResponse, null, 2));
       
       // Check if eye tracking data is preserved
       if (mockResponse.eyeTracking || mockResponse.eye_tracking) {
-        console.log('✅ Eye tracking data preserved in mock response');
-        console.log('👁️ Eye tracking in mock response:', mockResponse.eyeTracking || mockResponse.eye_tracking);
+        console.log('Eye tracking data preserved in mock response');
+        console.log('Eye tracking in mock response:', mockResponse.eyeTracking || mockResponse.eye_tracking);
       } else {
-        console.log('❌ Eye tracking data LOST in mock response');
+        console.log('Eye tracking data LOST in mock response');
       }
       
       // Save user progress if authenticated (even in mock mode)
@@ -216,7 +227,7 @@ const App = () => {
         try {
           await saveUserProgress(mockResponse, metrics, transcript);
         } catch (progressError) {
-          console.error('❌ Failed to save user progress in mock mode:', progressError);
+          console.error('Failed to save user progress in mock mode:', progressError);
           // Don't fail the entire process if progress saving fails
         }
       }
@@ -227,9 +238,11 @@ const App = () => {
     }, 2000); // 2 second delay
   }, [isAuthenticated, saveUserProgress]);
 
-  // Calculate scores from metrics (moved from FeedbackReport)
+  // Calculate scores from metrics (FIXED VERSION - exact copy from FeedbackReport)
   const calculateScores = (metrics) => {
-    // Helper function from FeedbackReport
+    console.log('calculateScores input metrics:', metrics);
+    
+    // Copy the getPercentScore function from FeedbackReport
     const getPercentScore = (value, {
       min = 0,
       max = 300,
@@ -237,75 +250,166 @@ const App = () => {
       idealMax = 200,
       idealCenter = null
     } = {}) => {
-      const center = idealCenter || (idealMin + idealMax) / 2;
-      if (value >= idealMin && value <= idealMax) {
-        return 100;
-      } else if (value < center) {
+      if (value <= min || value >= max) return 0;
+
+      const center = idealCenter ?? (idealMin + idealMax) / 2;
+
+      if (value < idealMin) {
         return Math.max(0, ((value - min) / (center - min)) * 100);
+      } else if (value <= idealMax) {
+        const distance = Math.abs(value - center);
+        const maxDistance = Math.max(center - idealMin, idealMax - center);
+        return 100 - (distance / maxDistance) * 100;
       } else {
         return Math.max(0, ((max - value) / (max - center)) * 100);
       }
     };
 
-    // Extract voice data
-    const voiceData = metrics?.voiceAnalysis || metrics || {};
-    
-    // Extract hand data  
-    const handData = metrics?.handTracking || metrics || {};
-    
-    // Extract eye data
-    const eyeData = {
-      eyeContactPercentage: metrics?.eyeContactPercentage || 0,
-      smilePercentage: metrics?.smilePercentage || 0,
-      sessionDuration: metrics?.sessionDuration || '00:00'
+    // Extract voice data exactly like FeedbackReport
+    const getVoiceData = () => {
+      const voiceMetrics = metrics?.voiceAnalysis 
+      if (voiceMetrics) {
+        return{
+          averageVolume: voiceMetrics.averageVolume || 0,
+          volumeVariation: voiceMetrics.volumeVariation || 0,
+          pitchVariation: voiceMetrics.pitchVariation || 0,
+          speechRate: voiceMetrics.speechRate || 0,
+          clarity: voiceMetrics.clarity || 0,
+          totalSamples: voiceMetrics.totalSamples || 0,
+          hasData: true
+        }
+      } else {
+        return {
+          averageVolume: 0,
+          volumeVariation: 0,
+          pitchVariation: 0,
+          speechRate: 0,
+          clarity: 0,
+          totalSamples: 0,
+          hasData: false
+        };
+      }
     };
 
-    // Content score calculation (simplified - would need STAR analysis for real calculation)
-    const contentScore = 0; // Will be calculated by backend based on transcript
-    
-    // Voice/Pitch score calculation
-    const pitchScore = Math.round(((voiceData.pitchVariation || 0) + (voiceData.clarity || 0)) / 2);
-    
-    // Nonverbal/Face score calculation
-    let nonverbalScore = 0;
-    if (handData.averageHandsVisibleTime && eyeData.sessionDuration) {
-      const sessionDurationInSeconds = parseInt(eyeData.sessionDuration.split(':')[0]) * 60 + parseInt(eyeData.sessionDuration.split(':')[1]);
-      const handVisibilityComponent = Math.round((handData.averageHandsVisibleTime / sessionDurationInSeconds) * 100);
-      const averageSpeedComponent = Math.round(getPercentScore(handData.averageSpeedBothHands, {
-        min: 0,
-        max: 300,
-        idealMin: 120,
-        idealMax: 200,
-        idealCenter: 160
-      }));
-      const erraticnessComponent = Math.round(getPercentScore(handData.averageErraticnessBothHands, {
-        min: 0,
-        max: 10,
-        idealMin: 0,
-        idealMax: 6,
-        idealCenter: 3
-      }));
-      
-      nonverbalScore = Math.round((handVisibilityComponent + averageSpeedComponent + erraticnessComponent) / 3);
-    }
+    // Extract eye data exactly like FeedbackReport
+    const getEyeData = () => {
+      return {
+        eyeContactPercentage: metrics?.eyeContactPercentage ?? 0,
+        smilePercentage: metrics?.smilePercentage ?? 0,
+        sessionDuration: metrics?.sessionDuration ?? '00:00'
+      };
+    };
 
-    return {
+    // Extract hand data exactly like FeedbackReport
+    const getHandData = () => {
+      const handMetrics = metrics?.handMetrics || [];
+      
+      // Safely get hand data with fallbacks
+      const hand0 = handMetrics[0] || {};
+      const hand1 = handMetrics[1] || {};
+      
+      const speed0 = hand0.averageSpeed || 0;
+      const speed1 = hand1.averageSpeed || 0;
+      const erratic0 = hand0.averageErraticness || 0;
+      const erratic1 = hand1.averageErraticness || 0;
+      const visible0 = hand0.totalVisibleTime || 0;
+      const visible1 = hand1.totalVisibleTime || 0;
+      
+      return {
+        handMetrics: handMetrics,
+        averageSpeedBothHands: handMetrics.length >= 2 ? (speed0 + speed1) / 2 : (speed0 || 0),
+        averageErraticnessBothHands: handMetrics.length >= 2 ? (erratic0 + erratic1) / 2 : (erratic0 || 0),
+        averageHandsVisibleTime: handMetrics.length >= 2 ? (visible0 + visible1) / 2 : (visible0 || 0),
+        hasData: handMetrics.length > 0
+      };
+    };
+
+    const voiceData = getVoiceData();
+    const eyeData = getEyeData();
+    const handData = getHandData();
+
+    console.log('Voice data extracted:', voiceData);
+    console.log('Eye data extracted:', eyeData);
+    console.log('Hand data extracted:', handData);
+
+    // Content score calculation - using STAR analysis like FeedbackReport
+    let starData = metrics?.star_analysis || metrics?.starAnalysis || {};
+    const starComponents = ['situation', 'task', 'action', 'result'];
+    const presentCount = starComponents.reduce((count, key) => {
+      return count + (Array.isArray(starData[key]) && starData[key].length > 0 ? 1 : 0);
+    }, 0);
+    const bonus = (presentCount / 4) * 25;
+    const baseScore = typeof starData.score === 'number' ? starData.score : 0;
+    const contentScore = Math.round(baseScore + bonus);
+
+    // Pitch score calculation - exactly like FeedbackReport
+    const pitchScore = Math.round((voiceData.pitchVariation + voiceData.clarity) / 2);
+    
+    // Nonverbal score calculation - EXACT COPY from FeedbackReport
+    const sessionDurationInSeconds = parseInt(eyeData.sessionDuration.split(':')[0]) * 60 + parseInt(eyeData.sessionDuration.split(':')[1]);
+    
+    const handVisibilityComponent = sessionDurationInSeconds > 0 ? 
+      Math.round((handData.averageHandsVisibleTime / sessionDurationInSeconds) * 100) : 0;
+      
+    const averageSpeedComponent = Math.round(getPercentScore(handData.averageSpeedBothHands, {
+      min: 0,
+      max: 300,
+      idealMin: 120,
+      idealMax: 200,
+      idealCenter: 160
+    }));
+    
+    const erraticnessComponent = Math.round(getPercentScore(handData.averageErraticnessBothHands, {
+      min: 0,
+      max: 10,
+      idealMin: 0,
+      idealMax: 6,
+      idealCenter: 3
+    }));
+
+    const smileComponent = Math.round(getPercentScore(eyeData.smilePercentage, {
+      min: 0,
+      max: 100,
+      idealMin: 20,
+      idealMax: 60,
+      idealCenter: 40
+    }));
+
+    const nonverbalScore = Math.round((handVisibilityComponent + averageSpeedComponent + erraticnessComponent + eyeData.eyeContactPercentage + smileComponent) / 5);
+    
+    console.log('Nonverbal calculation components:', {
+      handVisibilityComponent,
+      averageSpeedComponent,
+      erraticnessComponent,
+      eyeContactPercentage: eyeData.eyeContactPercentage,
+      smileComponent,
+      final: nonverbalScore
+    });
+    console.log('Calculated nonverbal score:', nonverbalScore);
+
+    const result = {
       content_score: contentScore,
       voice_score: pitchScore,
-      face_score: nonverbalScore
+      face_score: nonverbalScore  // This should now be 62, not 67
     };
+    
+    console.log('Final calculateScores result:', result);
+    console.log('FACE SCORE BEING RETURNED:', result.face_score);
+    
+    return result;
   };
 
-  // Real API processing function with debugging
+  // Real API processing function with detailed debugging
   const handleRealProcessing = useCallback(async (metrics, transcript, questionId) => {
-    console.log('🌐 STEP 5A - Real API processing started');
-    console.log('📤 Input metrics to API:', metrics);
-    console.log('📝 Input transcript to API:', transcript);
-    console.log('🎯 Question ID passed to handleRealProcessing:', questionId);
+    console.log('STEP 5A - Real API processing started');
+    console.log('Input metrics to API:', metrics);
+    console.log('Input transcript to API:', transcript);
+    console.log('Question ID passed to handleRealProcessing:', questionId);
     
     // Calculate scores from metrics
     const calculatedScores = calculateScores(metrics);
-    console.log('📊 Calculated scores:', calculatedScores);
+    console.log('Calculated scores:', calculatedScores);
+    console.log('CALCULATED FACE SCORE:', calculatedScores.face_score);
     
     const requestPayload = {
       transcript,
@@ -322,10 +426,10 @@ const App = () => {
       question_id: questionId
     };
     
-    console.log('📤 STEP 5B - Final API request payload:', requestPayload);
-    console.log('🔍 Payload JSON:', JSON.stringify(requestPayload, null, 2));
-    console.log('👤 User authenticated:', isAuthenticated);
-    console.log('🎯 Question ID in payload:', questionId);
+    console.log('REQUEST PAYLOAD being sent to backend:', JSON.stringify(requestPayload, null, 2));
+    console.log('face_score in payload:', requestPayload.metrics?.face_score);
+    console.log('User authenticated:', isAuthenticated);
+    console.log('Question ID in payload:', questionId);
     
     try {
       const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -345,16 +449,16 @@ const App = () => {
       
       const responseData = await response.json();
       
-      console.log('📥 STEP 5C - API response received:', responseData);
-      console.log('🔍 Response JSON:', JSON.stringify(responseData, null, 2));
-      console.log('📊 Response keys:', Object.keys(responseData || {}));
+      console.log('RAW BACKEND RESPONSE:', JSON.stringify(responseData, null, 2));
+      console.log('BACKEND RETURNED FACE SCORE:', responseData.face_score);
+      console.log('Response keys:', Object.keys(responseData || {}));
       
       // Check if eye tracking data is in the response
       if (responseData.eyeTracking || responseData.eye_tracking) {
-        console.log('✅ Eye tracking data preserved in API response');
-        console.log('👁️ Eye tracking in response:', responseData.eyeTracking || responseData.eye_tracking);
+        console.log('Eye tracking data preserved in API response');
+        console.log('Eye tracking in response:', responseData.eyeTracking || responseData.eye_tracking);
       } else {
-        console.log('❌ Eye tracking data LOST in API response');
+        console.log('Eye tracking data LOST in API response');
 
         // Try to restore eye tracking data if it's missing
         responseData.eyeTracking = metrics.eyeTracking;
@@ -363,40 +467,38 @@ const App = () => {
         responseData.smilePercentage = metrics.smilePercentage;
         responseData.sessionDuration = metrics.sessionDuration;
         
-        console.log('🔧 Restored eye tracking data to response:', responseData);
+        console.log('Restored eye tracking data to response:', responseData);
       }
 
       if (responseData.handMetrics) {
-        console.log('✅ Hand tracking data preserved in API response');
-        console.log('👁️ Hand tracking in response:', responseData.handMetrics);
+        console.log('Hand tracking data preserved in API response');
+        console.log('Hand tracking in response:', responseData.handMetrics);
       } else {
-        console.log('❌ Hand tracking data LOST in API response');
+        console.log('Hand tracking data LOST in API response');
         
-        // Try to restore eye tracking data if it's missing
+        // Try to restore hand tracking data if it's missing
         responseData.handMetrics = metrics.handMetrics;
-        // responseData.handInterviewTime  = metrics.interviewDurationSec; 
-        console.log('🔧 Restored hand tracking data to response:', responseData.handMetrics);        
+        console.log('Restored hand tracking data to response:', responseData.handMetrics);        
       }
 
       if (responseData.voiceAnalysis) {
-        console.log('✅ Voice tracking data preserved in API response');
-        console.log('👁️ Voice tracking in response:', responseData.voiceAnalysis);
+        console.log('Voice tracking data preserved in API response');
+        console.log('Voice tracking in response:', responseData.voiceAnalysis);
       } else {
-        console.log('❌ Voice tracking data LOST in API response');
+        console.log('Voice tracking data LOST in API response');
         
-        // Try to restore eye tracking data if it's missing
+        // Try to restore voice tracking data if it's missing
         responseData.voiceAnalysis = metrics.voiceAnalysis;
-        // responseData.handInterviewTime  = metrics.interviewDurationSec; 
-        console.log('🔧 Restored hand tracking data to response:', responseData.handMetrics);        
+        console.log('Restored voice tracking data to response:', responseData.voiceAnalysis);        
       }
       
       // Save user progress if authenticated
       if (isAuthenticated) {
         try {
           // Progress is automatically saved by the backend in the comprehensive-analysis endpoint
-          console.log('✅ Progress automatically saved by backend');
+          console.log('Progress automatically saved by backend');
         } catch (progressError) {
-          console.error('❌ Failed to save user progress:', progressError);
+          console.error('Failed to save user progress:', progressError);
           // Don't fail the entire process if progress saving fails
         }
       }
@@ -406,24 +508,24 @@ const App = () => {
       setCurrentView('feedback');
       
     } catch (error) {
-      console.error('❌ API error:', error);
+      console.error('API error:', error);
       
       // Fallback to mock data if API fails
-      console.log('🔧 API failed, falling back to mock processing');
+      console.log('API failed, falling back to mock processing');
       handleMockProcessing(metrics, transcript, questionId);
     }
   }, [isAuthenticated, getAuthHeaders, saveUserProgress]);
 
   // Handle interview start
   const handleInterviewStart = useCallback((questionId) => {
-    console.log('🎬 Starting interview with question:', questionId);
+    console.log('Starting interview with question:', questionId);
     setSelectedQuestion(questionId);
     setCurrentView('setup');
     setFeedbackReport(null);
   }, []);
 
   const handleSetupComplete = useCallback((mediaStream) => {
-    console.log('✅ Setup complete, starting interview with preset stream');
+    console.log('Setup complete, starting interview with preset stream');
     
     // Track interview start for lean startup analytics
     trackLearnStartupEvents.interviewStarted('behavioral', selectedQuestion);
@@ -434,8 +536,8 @@ const App = () => {
 
   // Handle interview end (back to question selection)
   const handleInterviewEnd = useCallback(() => {
-    console.log('🛑 Interview ended, returning to question selection');
-    console.log('🔍 selectedQuestion before clearing:', selectedQuestion);
+    console.log('Interview ended, returning to question selection');
+    console.log('selectedQuestion before clearing:', selectedQuestion);
 
     if (presetMediaStream) {
       presetMediaStream.getTracks().forEach(track => track.stop());
@@ -449,7 +551,7 @@ const App = () => {
   }, [selectedQuestion, presetMediaStream]);
 
   const handleStartNewInterview = useCallback(() => {
-    console.log('🔄 Starting new interview from feedback');
+    console.log('Starting new interview from feedback');
 
     if (presetMediaStream) {
       presetMediaStream.getTracks().forEach(track => track.stop());
@@ -624,5 +726,4 @@ const AppWithProviders = () => {
 };
 
 export default AppWithProviders;
-
 

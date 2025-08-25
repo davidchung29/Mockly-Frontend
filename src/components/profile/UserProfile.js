@@ -709,11 +709,11 @@ const UserProfile = ({ onNavigateToInterview, currentView }) => {
                     <span className="score-value">{formatScore(selectedSession.content_score)}</span>
                   </div>
                   <div className="score-item">
-                    <span className="score-label">Voice</span>
+                    <span className="score-label">Pitch</span>
                     <span className="score-value">{formatScore(selectedSession.voice_score)}</span>
                   </div>
                   <div className="score-item">
-                    <span className="score-label">Face</span>
+                    <span className="score-label">Nonverbal</span>
                     <span className="score-value">{formatScore(selectedSession.face_score)}</span>
                   </div>
                   <div className="score-item overall">
