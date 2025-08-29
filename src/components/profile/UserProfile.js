@@ -7,6 +7,7 @@ const UserProfile = ({ onNavigateToInterview, currentView }) => {
   const { user, updateProfile, getAuthHeaders } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showHelpPopup, setShowHelpPopup] = useState(false);
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: ''
@@ -476,13 +477,11 @@ const UserProfile = ({ onNavigateToInterview, currentView }) => {
           >
             <i className={`fas ${viewMode === 'list' ? 'fa-th' : 'fa-list'}`}></i>
           </button>
-          <button className="control-btn shuffle-btn" title="Random Practice">
-            <i className="fas fa-random"></i>
-          </button>
+          
           <button className="control-btn export-btn" onClick={handleExportProgress} disabled={exportLoading}>
             <i className="fas fa-download"></i>
           </button>
-          <button className="control-btn help-btn" title="Help">
+          <button className="control-btn help-btn" title="Help" onClick={() => setShowHelpPopup(true)}>
             <i className="fas fa-question"></i>
           </button>
         </div>
@@ -768,6 +767,42 @@ const UserProfile = ({ onNavigateToInterview, currentView }) => {
               )}
 
 
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Help Popup - ADD THIS HERE */}
+      {showHelpPopup && (
+        <div className="session-popup-overlay" onClick={() => setShowHelpPopup(false)}>
+          <div className="session-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="popup-header">
+              <h3>How to Use Mockly</h3>
+              <button className="close-btn" onClick={() => setShowHelpPopup(false)}>
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            
+            <div className="popup-content">
+              <div className="help-section">
+                <h4>Getting Started</h4>
+                <p>Click on any category to expand it and see available questions. Click a question to start practicing.</p>
+              </div>
+
+              <div className="help-section">
+                <h4>View Controls</h4>
+                <p><strong>Grid/List Toggle:</strong> Switch between card view and table view for questions.</p>
+                <p><strong>Export:</strong> Download your progress data as a JSON file.</p>
+              </div>
+
+              <div className="help-section">
+                <h4>Progress Tracking</h4>
+                <p>Your progress is automatically saved. Green checkmarks indicate completed questions. Click the star to bookmark questions for later review.</p>
+              </div>
+
+              <div className="help-section">
+                <h4>STAR Method</h4>
+                <p>Use the Situation, Task, Action, Result framework to structure your behavioral interview responses for maximum impact.</p>
+              </div>
             </div>
           </div>
         </div>
